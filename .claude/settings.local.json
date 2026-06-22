@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://127.0.0.1:9292/api/login -H 'Content-Type: application/json' -d '{\"data\":{\"email\":\"admin@vegfresh.in\",\"password\":\"Admin@123\"}}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(curl *)"
+    ]
+  }
+}
