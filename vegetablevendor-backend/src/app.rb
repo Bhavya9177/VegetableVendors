@@ -64,10 +64,13 @@ module App
     end
 
     def connect_to_database
-      @db = Sequel.connect(db_url, 
-        max_connections: NUMBER_OF_CONNECTIONS, 
-        logger: logger, 
-        after_connect: Proc.new { logger.info("Database connection established") }
+      @db = Sequel.connect(db_url,
+        max_connections: NUMBER_OF_CONNECTIONS,
+        logger: logger,
+        after_connect: ->(conn) {
+          conn.set_client_encoding('UTF8') if conn.respond_to?(:set_client_encoding)
+          logger.info("Database connection established")
+        }
       )
       @db.extension(:connection_validator)
       @db.pool.connection_validation_timeout = 3600

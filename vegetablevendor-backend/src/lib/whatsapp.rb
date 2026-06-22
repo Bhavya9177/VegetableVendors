@@ -15,10 +15,10 @@ module App
     # Returns the best available token: cached refreshed token → .env fallback
     def self.access_token
       if File.exist?(TOKEN_CACHE_FILE)
-        cached = File.read(TOKEN_CACHE_FILE).strip
+        cached = File.read(TOKEN_CACHE_FILE, encoding: 'UTF-8').strip
         return cached if cached.length > 10
       end
-      ENV['WHATSAPP_ACCESS_TOKEN']
+      ENV['WHATSAPP_ACCESS_TOKEN']&.encode('UTF-8', invalid: :replace, undef: :replace)
     end
 
     def self.phone_number_id; ENV['WHATSAPP_PHONE_NUMBER_ID']; end
@@ -174,65 +174,100 @@ module App
 
       out_of_stock   = critical_items.select { |i| i[:current_stock] <= 0 }
       critically_low = critical_items.reject { |i| i[:current_stock] <= 0 }
+      total          = out_of_stock.size + critically_low.size + warning_items.size
 
       lines = []
-      total = out_of_stock.size + critically_low.size + warning_items.size
 
       if out_of_stock.any?
-        lines << "❌ OUT OF STOCK (#{out_of_stock.size} item#{out_of_stock.size > 1 ? 's' : ''}):"
+        lines << "OUT OF STOCK (#{out_of_stock.size} item#{out_of_stock.size > 1 ? 's' : ''}):"
         out_of_stock.each_with_index do |item, i|
-          lines << "#{i + 1}. #{item[:product_name]} — 0 #{item[:unit]} remaining"
-          lines << "   Suggested restock: #{item[:suggested_refill_qty]} #{item[:unit]}"
+          name = u8(item[:product_name]); unit = u8(item[:unit])
+          lines << "#{i + 1}. #{name} - 0 #{unit} remaining"
+          lines << "   Restock: #{item[:suggested_refill_qty]} #{unit}"
         end
         lines << ""
       end
 
       if critically_low.any?
-        lines << "🚨 CRITICALLY LOW (#{critically_low.size} item#{critically_low.size > 1 ? 's' : ''}):"
+        lines << "CRITICALLY LOW (#{critically_low.size} item#{critically_low.size > 1 ? 's' : ''}):"
         critically_low.each_with_index do |item, i|
+          name = u8(item[:product_name]); unit = u8(item[:unit])
           days_txt = item[:days_of_stock_remaining] ? "~#{item[:days_of_stock_remaining]}d left" : "very low"
-          lines << "#{i + 1}. #{item[:product_name]} — #{item[:current_stock]} #{item[:unit]} (#{days_txt})"
-          lines << "   Suggested restock: #{item[:suggested_refill_qty]} #{item[:unit]}"
+          lines << "#{i + 1}. #{name} - #{item[:current_stock]} #{unit} (#{days_txt})"
+          lines << "   Restock: #{item[:suggested_refill_qty]} #{unit}"
         end
         lines << ""
       end
 
       if warning_items.any?
-        lines << "⚠️ LOW STOCK (#{warning_items.size} item#{warning_items.size > 1 ? 's' : ''}):"
+        lines << "LOW STOCK (#{warning_items.size} item#{warning_items.size > 1 ? 's' : ''}):"
         warning_items.each_with_index do |item, i|
+          name = u8(item[:product_name]); unit = u8(item[:unit])
           days_txt = item[:days_of_stock_remaining] ? "~#{item[:days_of_stock_remaining]}d left" : "running low"
-          lines << "#{i + 1}. #{item[:product_name]} — #{item[:current_stock]} #{item[:unit]} (#{days_txt})"
-          lines << "   Suggested restock: #{item[:suggested_refill_qty]} #{item[:unit]}"
+          lines << "#{i + 1}. #{name} - #{item[:current_stock]} #{unit} (#{days_txt})"
+          lines << "   Restock: #{item[:suggested_refill_qty]} #{unit}"
         end
       end
 
-      body = <<~MSG
-        🌿 VegFresh — Stock Alert (#{total} item#{total > 1 ? 's' : ''} need attention)
+      out_count  = out_of_stock.size
+      crit_count = critically_low.size
+      warn_count = warning_items.size
 
-        #{lines.join("\n")}
+      parts = []
+      parts << "#{out_count} out of stock"    if out_count  > 0
+      parts << "#{crit_count} critically low" if crit_count > 0
+      parts << "#{warn_count} low stock"      if warn_count > 0
+      one_liner = parts.join(", ")
 
-        Please restock immediately to avoid order issues.
-        Go to: VegFresh Admin → Inventory
-      MSG
+      send_template(
+        to:            vendor_phone,
+        template_name: 'low_stock_alert',
+        params:        [one_liner],
+        required:      true
+      )
 
-      send_message(to: vendor_phone, body: body.strip, required: true)
+      details_body = lines.join("\n")
+      send_message(to: vendor_phone, body: details_body)
     end
 
     def self.restock_alert(product, qty_added, new_stock)
       return unless vendor_phone.present?
 
+      name = u8(product.name)
+      unit = u8(product.unit)
+
       body = <<~MSG
-        ✅ VegFresh — Stock Refilled
+        VegFresh - Stock Refilled
 
-        Product: #{product.name}
-        Quantity Added: +#{qty_added} #{product.unit}
-        New Stock Level: #{new_stock} #{product.unit}
+        Product: #{name}
+        Added: +#{qty_added} #{unit}
+        New Stock: #{new_stock} #{unit}
 
-        Stock has been replenished via Admin Panel.
-        Go to: VegFresh Admin → Inventory
+        Updated via Admin Panel.
       MSG
 
       send_message(to: vendor_phone, body: body.strip, required: true)
+    end
+
+    # ── Template sender (no 24-hour window restriction) ───────────────────────
+
+    def self.send_template(to:, template_name:, params: [], required: false)
+      phone = normalize_phone(to)
+      unless phone
+        raise "WhatsApp: invalid or missing phone number '#{to}'" if required
+        App.logger.warn("WhatsApp: skipping — invalid/missing phone '#{to}'")
+        return
+      end
+
+      unless access_token.present?
+        raise 'WhatsApp access token is not configured. Set WHATSAPP_ACCESS_TOKEN in .env'
+      end
+
+      unless phone_number_id.present? && phone_number_id != 'FILL_IN_FROM_META_BUSINESS_MANAGER'
+        raise 'WhatsApp Phone Number ID is not configured. Set WHATSAPP_PHONE_NUMBER_ID in .env'
+      end
+
+      do_send_template(phone: phone, template_name: template_name, params: params, token: access_token, attempt: 1)
     end
 
     # ── Core sender with auto-refresh on 401 ─────────────────────────────────
@@ -264,48 +299,116 @@ module App
       http.use_ssl      = true
       http.read_timeout = 15
 
+      safe_phone = phone.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
+      safe_token = token.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
+      safe_body  = body.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
+
       req = Net::HTTP::Post.new(uri)
-      req['Authorization'] = "Bearer #{token}"
+      req['Authorization'] = "Bearer #{safe_token}"
       req['Content-Type']  = 'application/json'
       req.body = {
         messaging_product: 'whatsapp',
         recipient_type:    'individual',
-        to:                phone,
+        to:                safe_phone,
         type:              'text',
-        text:              { preview_url: false, body: body }
+        text:              { preview_url: false, body: safe_body }
       }.to_json
 
-      App.logger.info("WhatsApp → sending to #{phone} via phone_number_id=#{phone_number_id}")
+      App.logger.info("WhatsApp sending to #{phone} via phone_number_id=#{phone_number_id}")
 
-      res    = http.request(req)
-      parsed = JSON.parse(res.body) rescue {}
+      res      = http.request(req)
+      res_body = u8(res.body)
+      parsed   = JSON.parse(res_body) rescue {}
 
-      App.logger.info("WhatsApp ← #{res.code}: #{res.body}")
+      App.logger.info("WhatsApp #{res.code}: #{res_body}")
 
       if res.code.to_i < 300
         msg_id = parsed.dig('messages', 0, 'id')
-        raise "WhatsApp: message not accepted by Meta (no message_id in response) — body: #{res.body}" unless msg_id
-        App.logger.info("WhatsApp ✓ → #{phone} (msg_id: #{msg_id})")
+        raise "WhatsApp: message not accepted by Meta (no message_id in response) - body: #{res_body}" unless msg_id
+        App.logger.info("WhatsApp sent ok to #{phone} (msg_id: #{msg_id})")
 
       elsif res.code.to_i == 401 && attempt == 1
-        # Token expired — clear any stale cache, then try to auto-refresh with .env token
-        App.logger.warn('WhatsApp: 401 received — clearing cache and attempting auto token refresh…')
+        App.logger.warn('WhatsApp: 401 received - clearing cache and attempting auto token refresh')
         File.delete(TOKEN_CACHE_FILE) if File.exist?(TOKEN_CACHE_FILE)
         new_token = refresh_token!
         if new_token
-          App.logger.info('WhatsApp: retrying with refreshed token…')
+          App.logger.info('WhatsApp: retrying with refreshed token')
           do_send(phone: phone, body: body, token: new_token, attempt: 2)
         else
-          app_id = ENV['WHATSAPP_APP_ID']
-          raise "WhatsApp token expired. Get a new 24-hour token here:\n" \
-                "  https://developers.facebook.com/apps/#{app_id}/whatsapp-business/wa-dev-console/\n" \
+          app_id = ENV['WHATSAPP_APP_ID'].to_s
+          raise "WhatsApp token expired. Get a new 24-hour token here: " \
+                "https://developers.facebook.com/apps/#{app_id}/whatsapp-business/wa-dev-console/ " \
                 "Paste it as WHATSAPP_ACCESS_TOKEN in .env, restart the server, " \
-                "then click 'Refresh Token' in Admin → WhatsApp to extend it to 60 days."
+                "then click Refresh Token in Admin WhatsApp to extend it to 60 days."
         end
 
       else
-        err_msg = parsed.dig('error', 'message') || res.body
-        App.logger.error("WhatsApp ✗ #{res.code}: #{err_msg}")
+        err_msg = parsed.dig('error', 'message') || res_body
+        App.logger.error("WhatsApp error #{res.code}: #{err_msg}")
+        raise "WhatsApp API error #{res.code}: #{err_msg}"
+      end
+    rescue => e
+      App.logger.error("WhatsApp error: #{e.class}: #{e.message}")
+      raise
+    end
+
+    def self.do_send_template(phone:, template_name:, params:, token:, attempt:)
+      uri  = URI("https://graph.facebook.com/#{API_VERSION}/#{phone_number_id}/messages")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl      = true
+      http.read_timeout = 15
+
+      components = []
+      unless params.empty?
+        components << {
+          type:       'body',
+          parameters: params.map { |p| { type: 'text', text: p.to_s.encode('UTF-8', invalid: :replace, undef: :replace) } }
+        }
+      end
+
+      safe_phone    = phone.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
+      safe_template = template_name.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
+      safe_token    = token.to_s.encode('UTF-8', invalid: :replace, undef: :replace)
+
+      req = Net::HTTP::Post.new(uri)
+      req['Authorization'] = "Bearer #{safe_token}"
+      req['Content-Type']  = 'application/json'
+      req.body = {
+        messaging_product: 'whatsapp',
+        to:                safe_phone,
+        type:              'template',
+        template: {
+          name:       safe_template,
+          language:   { code: 'en' },
+          components: components
+        }
+      }.to_json
+
+      App.logger.info("WhatsApp template '#{safe_template}' sending to #{safe_phone}")
+
+      res      = http.request(req)
+      res_body = u8(res.body)
+      parsed   = JSON.parse(res_body) rescue {}
+
+      App.logger.info("WhatsApp #{res.code}: #{res_body}")
+
+      if res.code.to_i < 300
+        msg_id = parsed.dig('messages', 0, 'id')
+        raise "WhatsApp: template not accepted (no message_id) - #{res_body}" unless msg_id
+        App.logger.info("WhatsApp template '#{safe_template}' sent ok to #{safe_phone} (msg_id: #{msg_id})")
+      elsif res.code.to_i == 401 && attempt == 1
+        App.logger.warn('WhatsApp: 401 - clearing cache and attempting auto token refresh')
+        File.delete(TOKEN_CACHE_FILE) if File.exist?(TOKEN_CACHE_FILE)
+        new_token = refresh_token!
+        if new_token
+          App.logger.info('WhatsApp: retrying template with refreshed token')
+          do_send_template(phone: phone, template_name: template_name, params: params, token: new_token, attempt: 2)
+        else
+          raise "WhatsApp token expired. Update WHATSAPP_ACCESS_TOKEN in .env."
+        end
+      else
+        err_msg = parsed.dig('error', 'message') || res_body
+        App.logger.error("WhatsApp error #{res.code}: #{err_msg}")
         raise "WhatsApp API error #{res.code}: #{err_msg}"
       end
     rescue => e
@@ -315,7 +418,7 @@ module App
 
     def self.normalize_phone(raw)
       return nil unless raw.present?
-      digits = raw.to_s.gsub(/\D/, '')
+      digits = raw.to_s.encode('UTF-8', invalid: :replace, undef: :replace).gsub(/\D/, '')
       return digits        if digits.length == 12 && digits.start_with?('91')
       return "91#{digits}" if digits.length == 10
       return digits        if digits.length > 10
@@ -326,6 +429,10 @@ module App
       '%.2f' % (paise.to_f / 100)
     end
 
-    private_class_method :fmt, :normalize_phone, :do_send
+    def self.u8(str)
+      str.to_s.encode('UTF-8', 'binary', invalid: :replace, undef: :replace)
+    end
+
+    private_class_method :fmt, :u8, :normalize_phone, :do_send, :do_send_template
   end
 end
