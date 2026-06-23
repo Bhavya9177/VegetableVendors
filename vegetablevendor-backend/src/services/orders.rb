@@ -181,9 +181,8 @@ class App::Services::Orders < App::Services::Base
     order = model.where(id: rp[:id].to_i, user_id: uid).eager(order_items: :product).first
     return_errors!('Order not found', 404) unless order
 
-    cart = App.db.transaction do
-      Cart.where(user_id: uid).first || Cart.create(user_id: uid)
-    end
+    cart = Cart.where(user_id: uid).first || Cart.create(user_id: uid)
+    return_errors!('Could not create cart', 500) unless cart
 
     CartItem.where(cart_id: cart.id).delete
 
@@ -191,7 +190,7 @@ class App::Services::Orders < App::Services::Base
     order.order_items.each do |item|
       product = item.product
       unless product
-        skipped << (item.product_name || 'Unknown item')
+        skipped << item.values[:product_name] || 'Unknown item'
         next
       end
 
@@ -201,10 +200,18 @@ class App::Services::Orders < App::Services::Base
       end
 
       qty = [item.quantity, product.stock].min
-      CartItem.create(cart_id: cart.id, product_id: product.id, quantity: qty)
+      existing = CartItem.where(cart_id: cart.id, product_id: product.id).first
+      if existing
+        existing.update(quantity: existing.quantity + qty)
+      else
+        CartItem.create(cart_id: cart.id, product_id: product.id, quantity: qty)
+      end
     end
 
     return_success(cart.reload.to_pos, skipped: skipped)
+  rescue => e
+    App.logger.error("reorder failed: #{e.class}: #{e.message}")
+    return_errors!(e.message, 422)
   end
 
   def cancel_order
