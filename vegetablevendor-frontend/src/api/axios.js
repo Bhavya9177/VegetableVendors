@@ -27,10 +27,8 @@ api.interceptors.response.use(
       sessionExpired = true
       useAuthStore.getState().logout()
       toast.error('Your session has expired. Please log in again.')
-      const isAdminApi = err.config?.url?.includes('/admin/')
-      setTimeout(() => {
-        window.location.href = isAdminApi ? '/admin/login' : '/login'
-      }, 1200)
+      // Route guards (AdminRoute / ProtectedRoute) react to the cleared token
+      // via Zustand and redirect client-side — no hard navigation needed.
     }
     return Promise.reject(err)
   }
