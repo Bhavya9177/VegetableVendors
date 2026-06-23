@@ -108,7 +108,6 @@ end
       end
 
       r.on 'orders' do
-        r.post { Orders[r].place_order }
         r.on(Integer) do |id|
           r.put('cancel')   { Orders[r, id: id].cancel_order }
           r.post('reorder') { Orders[r, id: id].reorder }
@@ -118,6 +117,7 @@ end
           end
           r.get { Orders[r, id: id].get }
         end
+        r.post { Orders[r].place_order }
         r.get { Orders[r].list }
       end
 
