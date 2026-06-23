@@ -14,9 +14,17 @@ class App::Helpers::CurrentUser
     def valid?
       return false if id.blank? || user_obj.nil?
 
-      # Admins have no JWT expiry and frequently use multiple tabs, so skip the
-      # single-session check for role 0. For regular users, enforce one session.
+      # Admins: skip exp and single-session checks entirely.
+      # Tokens generated before the user was promoted to admin may carry an exp
+      # field — we intentionally ignore it so admins are never kicked mid-session.
       return true if user_obj.role == 0
+
+      # Regular users: enforce token expiry manually (we decoded without it above)
+      dt = decoded_token
+      if dt&.[](:exp) && Time.now.to_i > dt[:exp].to_i
+        App.logger.warn("Token expired for user #{id}")
+        return false
+      end
 
       user_obj.current_session_id == token
     end
@@ -43,15 +51,10 @@ class App::Helpers::CurrentUser
       return nil if token.nil?
 
       space[:decoded] ||= begin
-        decoded = JWT.decode(token, SECRET, true, { algorithm: 'HS256' })[0].with_indifferent_access
-        
-        # Check token expiration
-        if decoded[:exp] && Time.now.to_i > decoded[:exp]
-          App.logger.warn("Token expired for user #{decoded[:id]}")
-          return nil
-        end
-        
-        decoded
+        # verify_expiration: false — we handle exp manually in valid? so that
+        # admin users are never locked out by an exp field they may have from
+        # a token that was originally generated while they held a non-admin role.
+        JWT.decode(token, SECRET, true, { algorithm: 'HS256', verify_expiration: false })[0].with_indifferent_access
       rescue JWT::DecodeError => e
         App.logger.error("JWT decode error: #{e.message}")
         nil

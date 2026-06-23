@@ -52,15 +52,18 @@ import AdminIssuesPage from './pages/admin/AdminIssuesPage'
 // (new login on another device invalidated this session), clears auth immediately
 // instead of letting the user navigate to a page and get kicked mid-session.
 function useSessionGuard() {
-  const token  = useAuthStore((s) => s.token)
-  const logout = useAuthStore((s) => s.logout)
-  const login  = useAuthStore((s) => s.login)
+  const token = useAuthStore((s) => s.token)
+  const login = useAuthStore((s) => s.login)
 
   useEffect(() => {
     if (!token) return
     getUserInfo()
       .then((user) => login(token, user))
-      .catch(() => logout())
+      .catch(() => {
+        // 401/403 → the axios interceptor already calls logout() and shows the
+        // "session expired" toast. Network errors / 5xx (e.g. Render cold-start)
+        // must NOT log the user out — the token is still valid.
+      })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 }
