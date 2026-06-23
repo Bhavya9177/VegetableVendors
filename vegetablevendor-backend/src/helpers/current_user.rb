@@ -13,8 +13,11 @@ class App::Helpers::CurrentUser
 
     def valid?
       return false if id.blank? || user_obj.nil?
-      
-      # Check if token matches and is not expired
+
+      # Admins have no JWT expiry and frequently use multiple tabs, so skip the
+      # single-session check for role 0. For regular users, enforce one session.
+      return true if user_obj.role == 0
+
       user_obj.current_session_id == token
     end
 

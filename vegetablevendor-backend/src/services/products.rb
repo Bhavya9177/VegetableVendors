@@ -11,9 +11,11 @@ class App::Services::Products < App::Services::Base
     ds = ds.where(Sequel[:price] >= qs[:min_price].to_i) if qs[:min_price].present?
     ds = ds.where(Sequel[:price] <= qs[:max_price].to_i) if qs[:max_price].present?
 
-    count = ds.count
+    count    = ds.count
+    products = ds.order(Sequel.desc(:created_at)).offset(offset).limit(limit).eager(:category).all
+    ratings  = batch_ratings(products.map(&:id))
     return_success(
-      ds.order(Sequel.desc(:created_at)).offset(offset).limit(limit).all.map(&:to_pos),
+      products.map { |p| p.to_pos(ratings[p.id]) },
       total_pages: (count / page_size.to_f).ceil,
       total: count
     )
@@ -23,9 +25,11 @@ class App::Services::Products < App::Services::Base
     ds = model.order(Sequel.desc(:created_at))
     ds = ds.where(Sequel.ilike(:name, "%#{qs[:search]}%")) if qs[:search].present?
     ds = ds.where(category_id: qs[:category_id].to_i) if qs[:category_id].present?
-    count = ds.count
+    count    = ds.count
+    products = ds.offset(offset).limit(limit).eager(:category).all
+    ratings  = batch_ratings(products.map(&:id))
     return_success(
-      ds.offset(offset).limit(limit).all.map(&:to_pos),
+      products.map { |p| p.to_pos(ratings[p.id]) },
       total_pages: (count / page_size.to_f).ceil,
       total: count
     )
@@ -71,6 +75,22 @@ class App::Services::Products < App::Services::Base
   end
 
   private
+
+  def batch_ratings(product_ids)
+    return {} if product_ids.empty?
+    App.db[:reviews]
+      .where(product_id: product_ids, active: true)
+      .group(:product_id)
+      .select(
+        :product_id,
+        Sequel.function(:count, :id).as(:cnt),
+        Sequel.function(:avg, :rating).as(:avg_rating)
+      )
+      .all
+      .each_with_object({}) do |row, h|
+        h[row[:product_id]] = { average: row[:avg_rating].to_f.round(1), count: row[:cnt] }
+      end
+  end
 
   def slugify(str)
     return '' if str.nil?

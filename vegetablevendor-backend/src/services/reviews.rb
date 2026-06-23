@@ -53,7 +53,7 @@ class App::Services::Reviews < App::Services::Base
     end
     count = ds.count
     return_success(
-      ds.offset(offset).limit(limit).all.map(&:to_pos),
+      ds.offset(offset).limit(limit).eager(:user, :product).all.map(&:to_pos),
       total_pages: (count / page_size.to_f).ceil,
       total: count
     )

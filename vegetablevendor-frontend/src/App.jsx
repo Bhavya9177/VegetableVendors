@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from './store/authStore'
+import { getUserInfo } from './api/auth'
 
 import Header from './components/layout/Header'
 import Footer from './components/layout/Footer'
@@ -46,9 +47,26 @@ import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage'
 import AdminCouponsPage from './pages/admin/AdminCouponsPage'
 import AdminSettingsPage from './pages/admin/AdminSettingsPage'
 
+// Validates the persisted token once on startup. If the server rejects it
+// (new login on another device invalidated this session), clears auth immediately
+// instead of letting the user navigate to a page and get kicked mid-session.
+function useSessionGuard() {
+  const token  = useAuthStore((s) => s.token)
+  const logout = useAuthStore((s) => s.logout)
+  const login  = useAuthStore((s) => s.login)
+
+  useEffect(() => {
+    if (!token) return
+    getUserInfo()
+      .then((user) => login(token, user))
+      .catch(() => logout())
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+}
+
 const qc = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
+    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
   },
 })
 
@@ -106,6 +124,11 @@ function GuestOnly() {
   return token ? <Navigate to="/" replace /> : <Outlet />
 }
 
+function AppInner() {
+  useSessionGuard()
+  return <Outlet />
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={qc}>
@@ -124,6 +147,7 @@ export default function App() {
           }}
         />
         <Routes>
+          <Route element={<AppInner />}>
           {/* Admin login — standalone */}
           <Route path="/admin/login" element={<AdminLoginPage />} />
 
@@ -174,6 +198,7 @@ export default function App() {
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>{/* AppInner */}
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from './axios'
 import toast from 'react-hot-toast'
+import { useAuthStore } from '../store/authStore'
 
 export const useUploadImage = () =>
   useMutation({
@@ -124,12 +125,16 @@ export const useDeleteCategory = () => {
   })
 }
 
-export const useInventoryAnalysis = () =>
-  useQuery({
+export const useInventoryAnalysis = (options = {}) => {
+  const token = useAuthStore((s) => s.token)
+  return useQuery({
     queryKey: ['inventory-analysis'],
     queryFn: () => api.get('/admin/inventory/analysis').then((r) => r.data),
+    enabled: !!token,
     staleTime: 5 * 60 * 1000,
+    ...options,
   })
+}
 
 export const useRunRefillCheck = () => {
   const qc = useQueryClient()
@@ -173,12 +178,16 @@ export const useRefillProduct = () => {
   })
 }
 
-export const useRefillLogs = (params = {}) =>
-  useQuery({
+export const useRefillLogs = (params = {}, options = {}) => {
+  const token = useAuthStore((s) => s.token)
+  return useQuery({
     queryKey: ['refill-logs', params],
     queryFn: () => api.get('/admin/inventory/refill-logs', { params }).then((r) => r.data),
+    enabled: !!token,
     staleTime: 60 * 1000,
+    ...options,
   })
+}
 
 export const useWhatsAppTokenStatus = () =>
   useQuery({

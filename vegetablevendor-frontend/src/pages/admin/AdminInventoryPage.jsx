@@ -178,13 +178,13 @@ function RefillModal({ product, onClose }) {
 // ─── Smart Refill Panel ────────────────────────────────────────────────────────
 
 function RefillPanel({ onRefill }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [logsPage, setLogsPage] = useState(1)
 
-  const { data: analysisData, isLoading: loadingAnalysis, dataUpdatedAt } = useInventoryAnalysis()
+  const { data: analysisData, isLoading: loadingAnalysis, dataUpdatedAt } = useInventoryAnalysis({ enabled: expanded })
   const { mutate: runCheck, isPending: running } = useRunRefillCheck()
-  const { data: logsData, isLoading: loadingLogs } = useRefillLogs({ page: logsPage, page_size: 15 })
+  const { data: logsData, isLoading: loadingLogs } = useRefillLogs({ page: logsPage, page_size: 15 }, { enabled: showLogs })
 
   const items    = analysisData?.data || []
   const critical = items.filter((i) => i.alert_level === 'critical')

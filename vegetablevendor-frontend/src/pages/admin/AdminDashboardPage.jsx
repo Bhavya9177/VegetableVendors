@@ -1,11 +1,12 @@
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   ShoppingCart, DollarSign, Truck, AlertTriangle,
-  Banknote, Users, TrendingUp, Package,
+  Banknote, Users, Package,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { useDashboard } from '../../api/admin'
 import MetricCard from '../../components/admin/MetricCard'
@@ -15,35 +16,7 @@ import { formatDate } from '../../utils/formatDate'
 
 const COLORS = ['#16A34A', '#F97316', '#3B82F6', '#8B5CF6', '#EF4444']
 
-const salesData = [
-  { day: 'Mon', sales: 4200, orders: 18 },
-  { day: 'Tue', sales: 3800, orders: 15 },
-  { day: 'Wed', sales: 5600, orders: 24 },
-  { day: 'Thu', sales: 4900, orders: 21 },
-  { day: 'Fri', sales: 6200, orders: 28 },
-  { day: 'Sat', sales: 7800, orders: 35 },
-  { day: 'Sun', sales: 5100, orders: 22 },
-]
-
-const weeklyRevenue = [
-  { week: 'W1', revenue: 28000 },
-  { week: 'W2', revenue: 35000 },
-  { week: 'W3', revenue: 31000 },
-  { week: 'W4', revenue: 42000 },
-]
-
-const topProducts = [
-  { name: 'Tomatoes', value: 340 },
-  { name: 'Onions', value: 280 },
-  { name: 'Potatoes', value: 210 },
-  { name: 'Carrots', value: 180 },
-  { name: 'Spinach', value: 150 },
-]
-
-const paymentBreakdown = [
-  { name: 'Online', value: 65 },
-  { name: 'COD', value: 35 },
-]
+const PIE_COLORS = { cod: '#F97316', online: '#16A34A', other: '#94A3B8' }
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload?.length) {
@@ -52,7 +25,7 @@ const CustomTooltip = ({ active, payload, label }) => {
         <p className="font-semibold text-slate-700 mb-1">{label}</p>
         {payload.map((p, i) => (
           <p key={i} style={{ color: p.color }} className="font-medium">
-            {p.name}: {p.name === 'sales' || p.name === 'revenue' ? `₹${p.value.toLocaleString()}` : p.value}
+            {p.name === 'Revenue' ? formatPrice(p.value) : `${p.value} orders`}
           </p>
         ))}
       </div>
@@ -74,6 +47,17 @@ function SkeletonCard() {
 export default function AdminDashboardPage() {
   const { data: res, isLoading } = useDashboard()
   const data = res?.data
+
+  // Normalise payment breakdown into chart-friendly format
+  const paymentChartData = useMemo(() => {
+    if (!data?.payment_breakdown) return []
+    const LABEL = { cod: 'COD', online: 'Online', other: 'Other' }
+    return data.payment_breakdown.map((p) => ({
+      name:  LABEL[p.method] ?? p.method,
+      value: p.count,
+      color: PIE_COLORS[p.method] ?? '#94A3B8',
+    }))
+  }, [data?.payment_breakdown])
 
   const stagger = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } }
   const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.3 } } }
@@ -98,122 +82,149 @@ export default function AdminDashboardPage() {
           Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
-            <MetricCard label="Total Orders"      value={data?.total_orders}                     icon={ShoppingCart} color="blue"   trend={12} />
-            <MetricCard label="Revenue"           value={formatPrice(data?.total_revenue ?? 0)}  icon={DollarSign}   color="green"  trend={8} subtitle="Delivered" />
-            <MetricCard label="Pending Delivery"  value={data?.pending_orders}                   icon={Truck}        color="orange" />
-            <MetricCard label="Low Stock Alerts"  value={data?.low_stock_count ?? 0}             icon={AlertTriangle} color="red" />
-            <MetricCard label="COD Pending"       value={formatPrice(0)}                         icon={Banknote}     color="yellow" />
-            <MetricCard label="Active Customers"  value={data?.total_products ?? 0}              icon={Users}        color="purple" />
+            <MetricCard label="Total Orders"     value={data?.total_orders}                        icon={ShoppingCart} color="blue"   />
+            <MetricCard label="Revenue"          value={formatPrice(data?.total_revenue ?? 0)}     icon={DollarSign}   color="green"  subtitle="Delivered orders" />
+            <MetricCard label="New Orders"       value={data?.pending_orders}                      icon={Truck}        color="orange" />
+            <MetricCard label="Low Stock Alerts" value={data?.low_stock_count ?? 0}                icon={AlertTriangle} color="red"  />
+            <MetricCard label="COD Pending"      value={formatPrice(data?.cod_pending_amount ?? 0)} icon={Banknote}    color="yellow" />
+            <MetricCard label="Customers"        value={data?.total_customers ?? 0}                icon={Users}        color="purple" />
           </>
         )}
       </motion.div>
 
       {/* Charts row */}
       <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Daily Sales Area Chart */}
+        {/* Daily Sales — current week */}
         <div className="lg:col-span-2 card p-5">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h2 className="font-heading font-semibold text-slate-800">Daily Sales</h2>
-              <p className="text-xs text-slate-400 mt-0.5">This week's performance</p>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-lg">
-              <TrendingUp size={12} />
-              +14% vs last week
+              <h2 className="font-heading font-semibold text-slate-800">Daily Orders This Week</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Orders placed Mon – Sun</p>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={salesData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#16A34A" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#16A34A" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="sales" name="sales" stroke="#16A34A" strokeWidth={2.5} fill="url(#salesGrad)" dot={{ r: 3, fill: '#16A34A', strokeWidth: 0 }} activeDot={{ r: 5 }} />
-            </AreaChart>
-          </ResponsiveContainer>
+          {isLoading ? (
+            <div className="h-[220px] skeleton-box rounded-xl" />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={data?.daily_sales ?? []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#16A34A" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#16A34A" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="orders" name="Orders" stroke="#16A34A" strokeWidth={2.5} fill="url(#salesGrad)" dot={{ r: 3, fill: '#16A34A', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
-        {/* Order Status Pie */}
+        {/* Payment Split */}
         <div className="card p-5">
           <div className="mb-5">
-            <h2 className="font-heading font-semibold text-slate-800">Payment Split</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Online vs COD</p>
+            <h2 className="font-heading font-semibold text-slate-800">Payment Methods</h2>
+            <p className="text-xs text-slate-400 mt-0.5">All-time order split</p>
           </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie data={paymentBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={72} dataKey="value" paddingAngle={3}>
-                {paymentBreakdown.map((_, i) => (
-                  <Cell key={i} fill={['#16A34A', '#F97316'][i]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v) => `${v}%`} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex justify-center gap-4 mt-2">
-            {paymentBreakdown.map((p, i) => (
-              <div key={p.name} className="flex items-center gap-1.5 text-xs text-slate-600">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: ['#16A34A', '#F97316'][i] }} />
-                {p.name} ({p.value}%)
+          {isLoading ? (
+            <div className="h-[160px] skeleton-box rounded-xl" />
+          ) : paymentChartData.length === 0 ? (
+            <div className="h-[160px] flex items-center justify-center text-slate-300 text-sm">No data yet</div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={paymentChartData} cx="50%" cy="50%" innerRadius={50} outerRadius={72} dataKey="value" paddingAngle={3}>
+                    {paymentChartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v, name) => [`${v} orders`, name]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex justify-center gap-4 mt-2">
+                {paymentChartData.map((p) => {
+                  const total = paymentChartData.reduce((s, x) => s + x.value, 0)
+                  const pct   = total > 0 ? Math.round((p.value / total) * 100) : 0
+                  return (
+                    <div key={p.name} className="flex items-center gap-1.5 text-xs text-slate-600">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: p.color }} />
+                      {p.name} ({pct}%)
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </motion.div>
 
-      {/* Weekly Revenue + Top Products */}
+      {/* Revenue by month + Top Products */}
       <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="card p-5">
           <div className="mb-5">
-            <h2 className="font-heading font-semibold text-slate-800">Weekly Revenue</h2>
-            <p className="text-xs text-slate-400 mt-0.5">This month breakdown</p>
+            <h2 className="font-heading font-semibold text-slate-800">Revenue by Month</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Delivered orders — all time</p>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={weeklyRevenue} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-              <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="revenue" name="revenue" fill="#16A34A" radius={[6, 6, 0, 0]} maxBarSize={48} />
-            </BarChart>
-          </ResponsiveContainer>
+          {isLoading ? (
+            <div className="h-[200px] skeleton-box rounded-xl" />
+          ) : !data?.revenue_by_month?.length ? (
+            <div className="h-[200px] flex items-center justify-center text-slate-300 text-sm">No delivered orders yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={data.revenue_by_month} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false}
+                  tickFormatter={(v) => `₹${(v / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} />
+                <Tooltip formatter={(v) => [formatPrice(v), 'Revenue']} />
+                <Bar dataKey="revenue" name="Revenue" fill="#16A34A" radius={[6, 6, 0, 0]} maxBarSize={48} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="card p-5">
           <div className="mb-5">
-            <h2 className="font-heading font-semibold text-slate-800">Top Selling Vegetables</h2>
-            <p className="text-xs text-slate-400 mt-0.5">By units sold</p>
+            <h2 className="font-heading font-semibold text-slate-800">Top Selling Products</h2>
+            <p className="text-xs text-slate-400 mt-0.5">By units sold (delivered orders)</p>
           </div>
-          <div className="space-y-3">
-            {topProducts.map((p, i) => {
-              const pct = Math.round((p.value / topProducts[0].value) * 100)
-              return (
-                <div key={p.name} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-slate-700 flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[10px] font-bold" style={{ background: COLORS[i] }}>
-                        {i + 1}
+          {isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton-box h-10 rounded-xl" />)}
+            </div>
+          ) : !data?.top_selling_products?.length ? (
+            <div className="flex items-center justify-center h-40 text-slate-300 text-sm">No sales data yet</div>
+          ) : (
+            <div className="space-y-3">
+              {data.top_selling_products.map((p, i) => {
+                const pct = Math.round((p.units_sold / data.top_selling_products[0].units_sold) * 100)
+                return (
+                  <div key={p.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-700 flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[10px] font-bold" style={{ background: COLORS[i] }}>
+                          {i + 1}
+                        </span>
+                        {p.name}
                       </span>
-                      {p.name}
-                    </span>
-                    <span className="text-slate-500">{p.value} units</span>
+                      <span className="text-slate-500">{p.units_sold} units · {formatPrice(p.revenue)}</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: COLORS[i] }} />
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: COLORS[i] }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </motion.div>
 
-      {/* Bottom row: recent orders + inventory alerts */}
+      {/* Bottom row: recent orders + stock alerts */}
       <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Recent orders */}
         <div className="lg:col-span-2 card overflow-hidden">
@@ -231,13 +242,13 @@ export default function AdminDashboardPage() {
             <p className="text-slate-400 text-sm text-center py-10">No orders yet</p>
           ) : (
             <>
-              {/* Mobile: card list */}
+              {/* Mobile */}
               <div className="sm:hidden divide-y divide-gray-50">
                 {data.recent_orders.slice(0, 6).map((order) => (
                   <div key={order.id} className="flex items-center justify-between px-4 py-3 gap-3">
                     <div>
                       <p className="font-semibold text-slate-700 text-sm">#{order.id}</p>
-                      <p className="text-xs text-slate-400">{order.address?.full_name || '—'}</p>
+                      <p className="text-xs text-slate-400">{order.address?.full_name || order.customer_name || '—'}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge status={order.status} />
@@ -246,7 +257,7 @@ export default function AdminDashboardPage() {
                   </div>
                 ))}
               </div>
-              {/* Desktop: table */}
+              {/* Desktop */}
               <div className="hidden sm:block overflow-x-auto">
                 <table className="admin-table">
                   <thead>
@@ -260,7 +271,7 @@ export default function AdminDashboardPage() {
                     {data.recent_orders.slice(0, 6).map((order) => (
                       <tr key={order.id}>
                         <td><span className="font-semibold text-slate-700">#{order.id}</span></td>
-                        <td><span className="text-slate-600">{order.address?.full_name || '—'}</span></td>
+                        <td><span className="text-slate-600">{order.address?.full_name || order.customer_name || '—'}</span></td>
                         <td><span className="font-semibold text-primary">{formatPrice(order.total_amount)}</span></td>
                         <td><StatusBadge status={order.status} /></td>
                         <td><span className="text-slate-400 text-xs">{formatDate(order.created_at)}</span></td>
@@ -314,7 +325,7 @@ export default function AdminDashboardPage() {
         </div>
       </motion.div>
 
-      {/* Orders by status row */}
+      {/* Order Status Overview */}
       {data?.orders_by_status && (
         <motion.div variants={item} className="card p-5">
           <h2 className="font-heading font-semibold text-slate-800 mb-4">Order Status Overview</h2>

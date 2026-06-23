@@ -28,8 +28,8 @@ class App::Models::Product < Sequel::Model
     end
   end
 
-  def to_pos
-    rd = rating_data
+  def to_pos(preloaded_rating = nil)
+    rd = preloaded_rating || rating_data
     {
       id: id,
       name: name,

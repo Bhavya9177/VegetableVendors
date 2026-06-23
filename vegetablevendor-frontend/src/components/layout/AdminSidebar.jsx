@@ -1,4 +1,5 @@
 import { NavLink, Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   LayoutDashboard, ShoppingCart, Package, Users, Truck,
   MessageSquare, BarChart3, Tag, Settings, LogOut,
@@ -6,6 +7,51 @@ import {
   ShoppingBag, Layers,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import api from '../../api/axios'
+
+const PREFETCH_MAP = {
+  '/admin': [
+    { queryKey: ['dashboard'], queryFn: () => api.get('/admin/dashboard').then(r => r.data) },
+  ],
+  '/admin/orders': [
+    { queryKey: ['admin-orders', { page: 1, page_size: 20 }], queryFn: () => api.get('/admin/orders', { params: { page: 1, page_size: 20 } }).then(r => r.data) },
+  ],
+  '/admin/products': [
+    { queryKey: ['admin-products', { page: 1, page_size: 20 }], queryFn: () => api.get('/admin/products', { params: { page: 1, page_size: 20 } }).then(r => r.data) },
+  ],
+  '/admin/categories': [
+    { queryKey: ['admin-categories', {}], queryFn: () => api.get('/admin/categories').then(r => r.data) },
+  ],
+  '/admin/inventory': [
+    { queryKey: ['admin-products', { page: 1, page_size: 30 }], queryFn: () => api.get('/admin/products', { params: { page: 1, page_size: 30 } }).then(r => r.data) },
+  ],
+  '/admin/customers': [
+    { queryKey: ['admin-users', { page: 1, page_size: 25 }], queryFn: () => api.get('/admin/users', { params: { page: 1, page_size: 25 } }).then(r => r.data) },
+  ],
+  '/admin/deliveries': [
+    { queryKey: ['admin-orders', { page_size: 200 }], queryFn: () => api.get('/admin/orders', { params: { page_size: 200 } }).then(r => r.data) },
+  ],
+  '/admin/whatsapp': [
+    { queryKey: ['whatsapp-token-status'], queryFn: () => api.get('/admin/whatsapp/token-status').then(r => r.data) },
+  ],
+  '/admin/analytics': [
+    { queryKey: ['dashboard'], queryFn: () => api.get('/admin/dashboard').then(r => r.data) },
+    { queryKey: ['admin-orders', { page_size: 200 }], queryFn: () => api.get('/admin/orders', { params: { page_size: 200 } }).then(r => r.data) },
+    { queryKey: ['admin-users', { per_page: 1 }], queryFn: () => api.get('/admin/users', { params: { per_page: 1 } }).then(r => r.data) },
+  ],
+  '/admin/coupons': [
+    { queryKey: ['admin-coupons', {}], queryFn: () => api.get('/admin/coupons').then(r => r.data) },
+  ],
+  '/admin/reviews': [
+    { queryKey: ['admin-reviews', { page: 1, page_size: 20 }], queryFn: () => api.get('/admin/reviews', { params: { page: 1, page_size: 20 } }).then(r => r.data) },
+  ],
+  '/admin/contact-messages': [
+    { queryKey: ['contact-messages', { page: 1, page_size: 20 }], queryFn: () => api.get('/admin/contact-messages', { params: { page: 1, page_size: 20 } }).then(r => r.data) },
+  ],
+  '/admin/settings': [
+    { queryKey: ['admin-settings'], queryFn: () => api.get('/admin/settings').then(r => r.data.data) },
+  ],
+}
 
 const navItems = [
   { to: '/admin',                   label: 'Dashboard',        icon: LayoutDashboard, end: true },
@@ -29,6 +75,15 @@ const bottomItems = [
 export default function AdminSidebar({ isOpen, onClose, collapsed, onToggleCollapse }) {
   const logout = useAuthStore((s) => s.logout)
   const user   = useAuthStore((s) => s.user)
+  const qc     = useQueryClient()
+
+  function prefetch(to) {
+    const queries = PREFETCH_MAP[to]
+    if (!queries) return
+    queries.forEach(({ queryKey, queryFn }) =>
+      qc.prefetchQuery({ queryKey, queryFn, staleTime: 10_000 })
+    )
+  }
 
   return (
     <>
@@ -97,6 +152,7 @@ export default function AdminSidebar({ isOpen, onClose, collapsed, onToggleColla
               to={to}
               end={end}
               onClick={onClose}
+              onMouseEnter={() => prefetch(to)}
               title={collapsed ? label : undefined}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group relative
@@ -135,6 +191,7 @@ export default function AdminSidebar({ isOpen, onClose, collapsed, onToggleColla
               key={to}
               to={to}
               onClick={onClose}
+              onMouseEnter={() => prefetch(to)}
               title={collapsed ? label : undefined}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group relative

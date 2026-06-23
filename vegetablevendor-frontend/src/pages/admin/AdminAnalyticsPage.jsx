@@ -3,15 +3,14 @@ import { motion } from 'framer-motion'
 import { DollarSign, ShoppingCart, Users, Package } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { useDashboard, useAdminUsers } from '../../api/admin'
-import { useAdminOrders } from '../../api/orders'
 import { formatPrice } from '../../utils/formatPrice'
 
 const COLORS = ['#16A34A', '#F97316', '#3B82F6', '#8B5CF6', '#EF4444', '#14B8A6']
 
-const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const PIE_COLORS = { cod: '#F97316', online: '#16A34A', other: '#94A3B8' }
 
 const STATUS_LABEL = {
   placed:           'Placed',
@@ -28,7 +27,7 @@ const CustomTooltip = ({ active, payload, label }) => {
         <p className="font-semibold text-slate-700 mb-1">{label}</p>
         {payload.map((p, i) => (
           <p key={i} style={{ color: p.color }} className="font-medium">
-            {p.name}: {p.name === 'Revenue' ? formatPrice(p.value * 100) : p.value}
+            {p.name === 'Revenue' ? formatPrice(p.value) : `${p.value} orders`}
           </p>
         ))}
       </div>
@@ -38,71 +37,54 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function AdminAnalyticsPage() {
-  const { data: dashData,  isLoading: dashLoading  } = useDashboard()
-  const { data: ordersData, isLoading: ordersLoading } = useAdminOrders({ page_size: 200 })
-  const { data: usersData  } = useAdminUsers({ per_page: 1 })
+  const { data: dashData, isLoading } = useDashboard()
+  const { data: usersData }           = useAdminUsers({ per_page: 1 })
 
-  const stats     = dashData?.data      || {}
-  const allOrders = ordersData?.data    || []
+  const stats          = dashData?.data   || {}
   const totalCustomers = usersData?.total || 0
 
-  // KPI values
-  const totalRevenue   = stats.total_revenue || 0
-  const totalOrders    = stats.total_orders  || 0
-  const avgOrderValue  = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
+  // Revenue and orders — both restricted to delivered orders for consistency
+  const totalRevenue = stats.total_revenue || 0
+  const totalOrders  = stats.total_orders  || 0
 
-  // Revenue trend grouped by month
-  const revenueByMonth = useMemo(() => {
-    const map = {}
-    allOrders.forEach((o) => {
-      const month = new Date(o.created_at).toLocaleString('en-US', { month: 'short' })
-      if (!map[month]) map[month] = { month, revenue: 0, orders: 0 }
-      map[month].revenue += o.total_amount / 100
-      map[month].orders  += 1
-    })
-    return MONTH_ORDER.filter((m) => map[m]).map((m) => map[m])
-  }, [allOrders])
+  // Avg order value: delivered revenue ÷ delivered order count (same numerator & denominator)
+  const deliveredCount  = useMemo(
+    () => (stats.orders_by_status || []).find((s) => s.status === 'delivered')?.count || 0,
+    [stats.orders_by_status]
+  )
+  const avgOrderValue = deliveredCount > 0 ? Math.round(totalRevenue / deliveredCount) : 0
 
-  // Orders by status (from dashboard)
-  const ordersByStatus = useMemo(() =>
-    (stats.orders_by_status || []).map((s) => ({
+  // Revenue by month — from dashboard (delivered orders only, all-time)
+  const revenueByMonth = stats.revenue_by_month || []
+
+  // Orders by status — from dashboard
+  const ordersByStatus = useMemo(
+    () => (stats.orders_by_status || []).map((s) => ({
       status: STATUS_LABEL[s.status] || s.status,
-      count: s.count,
+      count:  s.count,
     })),
     [stats.orders_by_status]
   )
 
-  // Top products aggregated from order items
-  const topProducts = useMemo(() => {
-    const map = {}
-    allOrders.forEach((o) => {
-      ;(o.items || []).forEach((item) => {
-        const key = item.product_name || `#${item.product_id}`
-        if (!map[key]) map[key] = { name: key, sales: 0, revenue: 0 }
-        map[key].sales   += item.quantity
-        map[key].revenue += (item.unit_price * item.quantity) / 100
-      })
-    })
-    return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 6)
-  }, [allOrders])
-
-  // Payment method breakdown
+  // Payment breakdown — from dashboard (all-time, not capped at 200)
   const paymentData = useMemo(() => {
-    const cod    = allOrders.filter((o) => o.payment_method === 'cod').length
-    const online = allOrders.filter((o) => o.payment_method !== 'cod').length
-    return [
-      { name: 'COD',    value: cod },
-      { name: 'Online', value: online },
-    ].filter((p) => p.value > 0)
-  }, [allOrders])
+    if (!stats.payment_breakdown?.length) return []
+    const LABEL = { cod: 'COD', online: 'Online', other: 'Other' }
+    return stats.payment_breakdown.map((p) => ({
+      name:  LABEL[p.method] ?? p.method,
+      value: p.count,
+      color: PIE_COLORS[p.method] ?? '#94A3B8',
+    }))
+  }, [stats.payment_breakdown])
 
-  const isLoading = dashLoading || ordersLoading
+  // Top products — from dashboard (aggregated server-side over all delivered orders)
+  const topProducts = stats.top_selling_products || []
 
   const kpis = [
-    { label: 'Total Revenue',    value: isLoading ? '—' : formatPrice(totalRevenue),              icon: DollarSign,  color: 'bg-emerald-500 ring-emerald-100' },
-    { label: 'Total Orders',     value: isLoading ? '—' : totalOrders.toLocaleString(),           icon: ShoppingCart, color: 'bg-blue-500 ring-blue-100' },
-    { label: 'Customers',        value: isLoading ? '—' : totalCustomers.toLocaleString(),        icon: Users,       color: 'bg-purple-500 ring-purple-100' },
-    { label: 'Avg Order Value',  value: isLoading ? '—' : formatPrice(avgOrderValue),             icon: Package,     color: 'bg-orange-500 ring-orange-100' },
+    { label: 'Total Revenue',   value: isLoading ? '—' : formatPrice(totalRevenue),       icon: DollarSign,   color: 'bg-emerald-500 ring-emerald-100' },
+    { label: 'Total Orders',    value: isLoading ? '—' : totalOrders.toLocaleString(),    icon: ShoppingCart, color: 'bg-blue-500 ring-blue-100' },
+    { label: 'Customers',       value: isLoading ? '—' : totalCustomers.toLocaleString(), icon: Users,        color: 'bg-purple-500 ring-purple-100' },
+    { label: 'Avg Order Value', value: isLoading ? '—' : formatPrice(avgOrderValue),      icon: Package,      color: 'bg-orange-500 ring-orange-100' },
   ]
 
   return (
@@ -124,7 +106,9 @@ export default function AdminAnalyticsPage() {
                   <Icon size={20} className="text-white" />
                 </div>
               </div>
-              <p className="text-2xl font-bold font-heading text-slate-800">{value}</p>
+              {isLoading
+                ? <div className="skeleton-box h-7 w-24 rounded-lg mb-1" />
+                : <p className="text-2xl font-bold font-heading text-slate-800">{value}</p>}
               <p className="text-sm text-slate-500 mt-0.5">{label}</p>
             </div>
           )
@@ -135,10 +119,12 @@ export default function AdminAnalyticsPage() {
       <div className="card p-5">
         <div className="mb-5">
           <h2 className="font-heading font-semibold text-slate-800">Revenue Trend</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Monthly revenue from all orders</p>
+          <p className="text-xs text-slate-400 mt-0.5">Monthly revenue — delivered orders only</p>
         </div>
-        {revenueByMonth.length === 0 ? (
-          <div className="flex items-center justify-center h-40 text-slate-300 text-sm">No order data yet</div>
+        {isLoading ? (
+          <div className="h-[240px] skeleton-box rounded-xl" />
+        ) : revenueByMonth.length === 0 ? (
+          <div className="flex items-center justify-center h-40 text-slate-300 text-sm">No delivered orders yet</div>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={revenueByMonth} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
@@ -150,7 +136,12 @@ export default function AdminAnalyticsPage() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#94A3B8' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `₹${(v / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+              />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#16A34A" strokeWidth={2.5} fill="url(#revGrad)" dot={{ r: 3, fill: '#16A34A', strokeWidth: 0 }} />
             </AreaChart>
@@ -164,7 +155,9 @@ export default function AdminAnalyticsPage() {
         <div className="card p-5">
           <h2 className="font-heading font-semibold text-slate-800 mb-1">Orders by Status</h2>
           <p className="text-xs text-slate-400 mb-5">All-time order status distribution</p>
-          {ordersByStatus.length === 0 ? (
+          {isLoading ? (
+            <div className="h-[220px] skeleton-box rounded-xl" />
+          ) : ordersByStatus.length === 0 ? (
             <div className="flex items-center justify-center h-40 text-slate-300 text-sm">No data yet</div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
@@ -182,32 +175,34 @@ export default function AdminAnalyticsPage() {
         {/* Payment breakdown */}
         <div className="card p-5">
           <h2 className="font-heading font-semibold text-slate-800 mb-1">Payment Methods</h2>
-          <p className="text-xs text-slate-400 mb-5">COD vs Online payments</p>
-          {paymentData.length === 0 ? (
+          <p className="text-xs text-slate-400 mb-5">COD vs Online — all-time orders</p>
+          {isLoading ? (
+            <div className="h-[220px] skeleton-box rounded-xl" />
+          ) : paymentData.length === 0 ? (
             <div className="flex items-center justify-center h-40 text-slate-300 text-sm">No data yet</div>
           ) : (
             <>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
                   <Pie data={paymentData} cx="50%" cy="50%" innerRadius={50} outerRadius={72} dataKey="value" paddingAngle={3}>
-                    {paymentData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i]} />
+                    {paymentData.map((p, i) => (
+                      <Cell key={i} fill={p.color} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v, name) => [`${v} orders`, name]} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-2 mt-3">
-                {paymentData.map((p, i) => {
+                {paymentData.map((p) => {
                   const total = paymentData.reduce((s, x) => s + x.value, 0)
                   const pct   = total > 0 ? Math.round((p.value / total) * 100) : 0
                   return (
                     <div key={p.name} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COLORS[i] }} />
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.color }} />
                         <span className="text-slate-600">{p.name}</span>
                       </div>
-                      <span className="font-semibold text-slate-700">{p.value} ({pct}%)</span>
+                      <span className="font-semibold text-slate-700">{p.value} orders ({pct}%)</span>
                     </div>
                   )
                 })}
@@ -219,15 +214,21 @@ export default function AdminAnalyticsPage() {
 
       {/* Top products */}
       <div className="card p-5">
-        <h2 className="font-heading font-semibold text-slate-800 mb-5">Top Performing Products</h2>
-        {topProducts.length === 0 ? (
+        <h2 className="font-heading font-semibold text-slate-800 mb-1">Top Performing Products</h2>
+        <p className="text-xs text-slate-400 mb-5">By revenue — delivered orders, all time</p>
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton-box h-10 rounded-xl" />)}
+          </div>
+        ) : topProducts.length === 0 ? (
           <div className="flex items-center justify-center h-20 text-slate-300 text-sm">No product data yet</div>
         ) : (
           <div className="space-y-3">
             {topProducts.map((p, i) => {
-              const pct = topProducts[0].revenue > 0 ? Math.round((p.revenue / topProducts[0].revenue) * 100) : 0
+              const maxRevenue = topProducts[0].revenue
+              const pct = maxRevenue > 0 ? Math.round((p.revenue / maxRevenue) * 100) : 0
               return (
-                <div key={p.name} className="flex items-center gap-4">
+                <div key={p.id ?? p.name} className="flex items-center gap-4">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: COLORS[i] }}>
                     {i + 1}
                   </div>
@@ -235,7 +236,7 @@ export default function AdminAnalyticsPage() {
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="font-medium text-slate-700">{p.name}</span>
                       <span className="text-slate-500">
-                        {p.sales} sold · <span className="text-primary font-semibold">₹{p.revenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                        {p.units_sold} sold · <span className="text-primary font-semibold">{formatPrice(p.revenue)}</span>
                       </span>
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
