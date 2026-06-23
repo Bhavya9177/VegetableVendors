@@ -8,16 +8,13 @@ Bundler.require(:default, App.env)
 
 App.load!
 
-# Enable CORS
+# Enable CORS — allow all origins (JWT auth, no cookies/credentials needed)
 use Rack::Cors do
   allow do
-    origins 'http://localhost:5173',
-            'https://vegetable-vendors.vercel.app'
-
+    origins '*'
     resource '*',
       headers: :any,
-      methods: [:get, :post, :put, :patch, :delete, :options],
-      credentials: true
+      methods: [:get, :post, :put, :patch, :delete, :options]
   end
 end
 

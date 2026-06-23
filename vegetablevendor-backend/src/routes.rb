@@ -15,9 +15,6 @@ class App::Routes < Roda
   end
 
   route do |r|
-    response['Access-Control-Allow-Origin'] = '*'
-    response['Access-Control-Allow-Headers'] = '*'
-    response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     r.options { '' }
     r.public
 
