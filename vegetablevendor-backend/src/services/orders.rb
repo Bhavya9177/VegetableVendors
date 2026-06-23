@@ -176,6 +176,37 @@ class App::Services::Orders < App::Services::Base
     return_success(order.to_pos)
   end
 
+  def reorder
+    uid   = current_user[:id]
+    order = model.where(id: rp[:id].to_i, user_id: uid).eager(order_items: :product).first
+    return_errors!('Order not found', 404) unless order
+
+    cart = App.db.transaction do
+      Cart.where(user_id: uid).first || Cart.create(user_id: uid)
+    end
+
+    CartItem.where(cart_id: cart.id).delete
+
+    skipped = []
+    order.order_items.each do |item|
+      product = item.product
+      unless product
+        skipped << (item.product_name || 'Unknown item')
+        next
+      end
+
+      if product.is_out_of_stock || product.stock < 1
+        skipped << product.name
+        next
+      end
+
+      qty = [item.quantity, product.stock].min
+      CartItem.create(cart_id: cart.id, product_id: product.id, quantity: qty)
+    end
+
+    return_success(cart.reload.to_pos, skipped: skipped)
+  end
+
   def cancel_order
     uid   = current_user[:id]
     order = model.where(id: rp[:id].to_i, user_id: uid).first
@@ -200,6 +231,16 @@ class App::Services::Orders < App::Services::Base
     end
 
     return_success(order.to_pos)
+  end
+
+  def record_payment
+    order = model.where(id: rp[:id].to_i).first
+    return_errors!('Order not found', 404) unless order
+    order.update(
+      payment_status:    'paid',
+      payment_reference: params[:payment_reference].to_s.strip.presence
+    )
+    return_success(order.reload.to_pos)
   end
 
   def update_status

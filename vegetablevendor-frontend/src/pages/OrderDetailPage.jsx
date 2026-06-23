@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, FileText, XCircle, MapPin, Wallet, CheckCircle, Package, Truck, Clock, RefreshCw } from 'lucide-react'
-import { useOrder, useCancelOrder } from '../api/orders'
+import { ArrowLeft, FileText, XCircle, MapPin, Wallet, CheckCircle, Package, Truck, Clock, RefreshCw, ShoppingCart, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { useOrder, useCancelOrder, useReorder } from '../api/orders'
+import { useOrderIssues, useReportIssue } from '../api/orderIssues'
 import { StatusBadge } from '../components/ui/Badge'
 import { formatPrice } from '../utils/formatPrice'
 import { formatDateTime } from '../utils/formatDate'
@@ -100,12 +101,101 @@ function CancelModal({ orderId, onConfirm, onClose, loading }) {
   )
 }
 
+const ISSUE_TYPE_LABELS = {
+  missing_item:   'Missing Item',
+  wrong_item:     'Wrong Item',
+  bad_quality:    'Bad Quality',
+  late_delivery:  'Late Delivery',
+  damaged:        'Damaged Product',
+  other:          'Other',
+}
+
+const ISSUE_STATUS_META = {
+  open:       { label: 'Open',       bg: 'bg-red-50',    text: 'text-red-600' },
+  reviewing:  { label: 'Reviewing',  bg: 'bg-yellow-50', text: 'text-yellow-700' },
+  resolved:   { label: 'Resolved',   bg: 'bg-emerald-50',text: 'text-emerald-700' },
+}
+
+const RESOLUTION_LABELS = {
+  refund: 'Refund issued', replacement: 'Replacement arranged',
+  credit: 'Credit note added', none: 'No action required',
+}
+
+function ReportIssueModal({ orderId, onClose }) {
+  const [issueType, setIssueType]   = useState('')
+  const [description, setDescription] = useState('')
+  const { mutate: report, isPending } = useReportIssue()
+
+  const handleSubmit = () => {
+    if (!issueType || !description.trim()) return
+    report({ orderId, issue_type: issueType, description: description.trim() }, { onSuccess: onClose })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-3xl shadow-card-lg p-6 max-w-sm w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center mb-4">
+          <AlertCircle size={22} className="text-amber-600" />
+        </div>
+        <h3 className="font-heading font-bold text-slate-800 text-lg mb-1">Report an Issue</h3>
+        <p className="text-sm text-slate-500 mb-5">Tell us what went wrong and we'll make it right.</p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Issue Type *</label>
+            <select
+              value={issueType}
+              onChange={(e) => setIssueType(e.target.value)}
+              className="input-field"
+            >
+              <option value="">Select issue type…</option>
+              {Object.entries(ISSUE_TYPE_LABELS).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Description *</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Describe the problem in detail…"
+              className="input-field resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 btn-secondary justify-center py-2.5">Cancel</button>
+          <button
+            onClick={handleSubmit}
+            disabled={isPending || !issueType || !description.trim()}
+            className="flex-1 btn-primary justify-center py-2.5 disabled:opacity-50"
+          >
+            {isPending ? 'Submitting…' : 'Submit Issue'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 export default function OrderDetailPage() {
   const { id } = useParams()
   const { data: order, isLoading, isFetching, isError, refetch } = useOrder(id)
   const { mutate: cancelOrder, isPending: cancelling } = useCancelOrder()
+  const { mutate: reorder, isPending: reordering } = useReorder()
+  const { data: issues = [] } = useOrderIssues(id)
   const navigate = useNavigate()
   const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showIssueModal, setShowIssueModal]   = useState(false)
+  const [showIssues, setShowIssues]           = useState(false)
 
   if (isLoading) {
     return (
@@ -323,6 +413,81 @@ export default function OrderDetailPage() {
               View Invoice
             </button>
           </div>
+
+          {/* Reorder CTA */}
+          <div className="card p-5 flex items-center justify-between gap-4 border-primary/20 bg-primary-50/40">
+            <div>
+              <p className="font-semibold text-sm text-slate-800">Order Again</p>
+              <p className="text-xs text-slate-500 mt-0.5">Add all items from this order back to your cart</p>
+            </div>
+            <button
+              onClick={() => reorder(order.id)}
+              disabled={reordering}
+              className="btn-primary shrink-0 disabled:opacity-50"
+            >
+              <ShoppingCart size={16} />
+              {reordering ? 'Adding to Cart…' : 'Reorder'}
+            </button>
+          </div>
+
+          {/* Report Issue — only for delivered orders */}
+          {order.status === 'delivered' && (
+            <div className="card overflow-hidden">
+              <div className="p-5 flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-sm text-slate-800">Report an Issue</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {issues.length > 0
+                      ? `${issues.length} issue${issues.length > 1 ? 's' : ''} reported`
+                      : 'Missing item, wrong product, or quality concern?'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {issues.length > 0 && (
+                    <button
+                      onClick={() => setShowIssues((s) => !s)}
+                      className="btn-secondary btn-sm"
+                    >
+                      {showIssues ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      {showIssues ? 'Hide' : 'View'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowIssueModal(true)}
+                    className="btn-sm inline-flex items-center gap-1.5 border border-amber-200 text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors"
+                  >
+                    <AlertCircle size={13} />
+                    Report Issue
+                  </button>
+                </div>
+              </div>
+
+              {showIssues && issues.length > 0 && (
+                <div className="border-t border-gray-50 divide-y divide-gray-50">
+                  {issues.map((issue) => {
+                    const meta = ISSUE_STATUS_META[issue.status] || ISSUE_STATUS_META.open
+                    return (
+                      <div key={issue.id} className="px-5 py-4 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-700">{ISSUE_TYPE_LABELS[issue.issue_type] || issue.issue_type}</p>
+                          <span className={`badge text-xs ${meta.bg} ${meta.text}`}>{meta.label}</span>
+                        </div>
+                        <p className="text-xs text-slate-500">{issue.description}</p>
+                        {issue.resolution_type && issue.resolution_type !== 'none' && (
+                          <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                            <p className="text-xs font-semibold text-emerald-700">{RESOLUTION_LABELS[issue.resolution_type]}</p>
+                            {issue.resolution_notes && (
+                              <p className="text-xs text-emerald-600 mt-0.5">{issue.resolution_notes}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
 
@@ -332,6 +497,13 @@ export default function OrderDetailPage() {
           loading={cancelling}
           onClose={() => setShowCancelModal(false)}
           onConfirm={() => cancelOrder(order.id, { onSuccess: () => setShowCancelModal(false) })}
+        />
+      )}
+
+      {showIssueModal && (
+        <ReportIssueModal
+          orderId={order.id}
+          onClose={() => setShowIssueModal(false)}
         />
       )}
     </div>

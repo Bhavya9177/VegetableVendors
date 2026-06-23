@@ -113,8 +113,13 @@ end
       r.on 'orders' do
         r.post { Orders[r].place_order }
         r.on(Integer) do |id|
-          r.get           { Orders[r, id: id].get }
-          r.put('cancel') { Orders[r, id: id].cancel_order }
+          r.put('cancel')   { Orders[r, id: id].cancel_order }
+          r.post('reorder') { Orders[r, id: id].reorder }
+          r.on 'issues' do
+            r.get  { OrderIssues[r, id: id].list }
+            r.post { OrderIssues[r, id: id].create }
+          end
+          r.get { Orders[r, id: id].get }
         end
         r.get { Orders[r].list }
       end
@@ -154,10 +159,19 @@ end
 
         r.on 'orders' do
           r.on(Integer) do |id|
-            r.get { Orders[r, id: id].admin_get }
-            r.put { Orders[r, id: id].update_status }
+            r.get             { Orders[r, id: id].admin_get }
+            r.put('payment')  { Orders[r, id: id].record_payment }
+            r.put             { Orders[r, id: id].update_status }
           end
           r.get { Orders[r].admin_list }
+        end
+
+        r.on 'issues' do
+          r.on(Integer) do |id|
+            r.put('resolve') { OrderIssues[r, id: id].resolve }
+            r.put            { OrderIssues[r, id: id].update_status }
+          end
+          r.get { OrderIssues[r].admin_list }
         end
 
         r.on 'reviews' do

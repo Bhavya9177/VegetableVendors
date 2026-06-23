@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, Users, Truck,
   MessageSquare, BarChart3, Tag, Settings, LogOut,
   Store, ChevronLeft, ChevronRight, Star, Mail, X,
-  ShoppingBag, Layers,
+  ShoppingBag, Layers, AlertCircle,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import api from '../../api/axios'
@@ -66,6 +66,7 @@ const navItems = [
   { to: '/admin/coupons',           label: 'Coupons',          icon: Tag },
   { to: '/admin/reviews',           label: 'Reviews',          icon: Star },
   { to: '/admin/contact-messages',  label: 'Contact Messages', icon: Mail },
+  { to: '/admin/issues',            label: 'Customer Issues',  icon: AlertCircle },
 ]
 
 const bottomItems = [

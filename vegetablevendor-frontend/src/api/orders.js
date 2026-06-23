@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from './axios'
 import toast from 'react-hot-toast'
+import { useCartStore } from '../store/cartStore'
 
 export const useOrders = (params = {}) =>
   useQuery({
@@ -49,6 +50,26 @@ export const usePlaceOrder = () => {
   })
 }
 
+export const useReorder = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.post(`/orders/${id}/reorder`).then((r) => r.data),
+    onSuccess: ({ data: cart, skipped }) => {
+      qc.cancelQueries({ queryKey: ['cart'] })
+      qc.setQueryData(['cart'], cart)
+      useCartStore.getState().openCart()
+      if (skipped?.length) {
+        toast(`Cart updated — ${skipped.length} item(s) currently unavailable`, { icon: '⚠️' })
+      } else {
+        toast.success('Cart filled with your previous order!')
+      }
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.data || 'Failed to reorder')
+    },
+  })
+}
+
 export const useAdminOrders = (params = {}, options = {}) =>
   useQuery({
     queryKey: ['admin-orders', params],
@@ -69,6 +90,21 @@ export const useCancelOrder = () => {
     },
     onError: (err) => {
       toast.error(err.response?.data?.data || 'Failed to cancel order')
+    },
+  })
+}
+
+export const useRecordPayment = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payment_reference }) =>
+      api.put(`/admin/orders/${id}/payment`, { data: { payment_reference } }).then((r) => r.data.data),
+    onSuccess: (order) => {
+      qc.setQueryData(['order', String(order.id)], order)
+      qc.invalidateQueries({ queryKey: ['admin-orders'] })
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.data || 'Failed to record payment')
     },
   })
 }

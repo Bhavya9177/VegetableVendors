@@ -46,6 +46,7 @@ import AdminWhatsAppPage from './pages/admin/AdminWhatsAppPage'
 import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage'
 import AdminCouponsPage from './pages/admin/AdminCouponsPage'
 import AdminSettingsPage from './pages/admin/AdminSettingsPage'
+import AdminIssuesPage from './pages/admin/AdminIssuesPage'
 
 // Validates the persisted token once on startup. If the server rejects it
 // (new login on another device invalidated this session), clears auth immediately
@@ -194,6 +195,7 @@ export default function App() {
               <Route path="/admin/categories" element={<AdminCategoriesPage />} />
               <Route path="/admin/reviews" element={<AdminReviewsPage />} />
               <Route path="/admin/contact-messages" element={<AdminContactMessagesPage />} />
+              <Route path="/admin/issues" element={<AdminIssuesPage />} />
             </Route>
           </Route>
 

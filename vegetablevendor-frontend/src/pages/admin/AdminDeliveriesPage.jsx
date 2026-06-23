@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { MapPin, Phone, Clock, MessageSquare, ChevronRight, Package, Truck, CheckCircle, ClipboardList, Search, X } from 'lucide-react'
-import { useAdminOrders, useUpdateOrderStatus } from '../../api/orders'
+import { MapPin, Phone, Clock, MessageSquare, ChevronRight, Package, Truck, CheckCircle, ClipboardList, Search, X, Wallet, BadgeCheck } from 'lucide-react'
+import { useAdminOrders, useUpdateOrderStatus, useRecordPayment } from '../../api/orders'
 import { formatPrice } from '../../utils/formatPrice'
 
 const COLUMNS = [
@@ -11,10 +11,74 @@ const COLUMNS = [
   { key: 'delivered',       label: 'Delivered',       icon: CheckCircle,   color: 'border-t-green-400',  count_color: 'bg-green-100 text-green-700' },
 ]
 
-function DeliveryCard({ order, onMove }) {
+function PaymentModal({ order, onConfirm, onClose, loading }) {
+  const [reference, setReference] = useState('')
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-3xl shadow-card-lg p-6 max-w-sm w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
+          <Wallet size={22} className="text-emerald-600" />
+        </div>
+        <h3 className="font-heading font-bold text-slate-800 text-lg mb-1">Record Payment</h3>
+        <p className="text-sm text-slate-500 mb-4">
+          Order #{order.id} — <span className="font-semibold text-slate-700">{formatPrice(order.total_amount)}</span>
+        </p>
+
+        <div className="bg-slate-50 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+          <span className="text-base">💵</span>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Method</p>
+            <p className="text-sm font-medium text-slate-800">
+              {order.payment_method === 'cod' ? 'Cash on Delivery' : 'Online / UPI'}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+            Transaction Reference <span className="normal-case text-slate-400">(optional)</span>
+          </label>
+          <input
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="UPI ref, transaction ID, or cash note"
+            className="input-field"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 btn-secondary justify-center py-2.5">
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(reference.trim())}
+            disabled={loading}
+            className="flex-1 btn-primary justify-center py-2.5 disabled:opacity-50"
+          >
+            <BadgeCheck size={15} />
+            {loading ? 'Saving…' : 'Mark Delivered & Paid'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function DeliveryCard({ order, onMove, onMarkDelivered }) {
   const colIndex = COLUMNS.findIndex((c) => c.key === order.status)
   const nextCol  = COLUMNS[colIndex + 1]
   const addr     = order.address
+
+  const isPaid = order.payment_status === 'paid'
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-4 hover:shadow-card-lg transition-shadow space-y-3">
@@ -23,9 +87,16 @@ function DeliveryCard({ order, onMove }) {
           <p className="font-semibold text-slate-800 text-sm">{order.customer_name || addr?.full_name || '—'}</p>
           <p className="text-[11px] text-slate-400 mt-0.5">Order #{order.id}</p>
         </div>
-        <span className={`badge shrink-0 ${order.payment_method === 'cod' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
-          {order.payment_method === 'cod' ? 'COD' : 'Online'}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          <span className={`badge shrink-0 ${order.payment_method === 'cod' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
+            {order.payment_method === 'cod' ? 'COD' : 'Online'}
+          </span>
+          {order.status === 'delivered' && (
+            <span className={`badge shrink-0 ${isPaid ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+              {isPaid ? '✓ Paid' : 'Unpaid'}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1.5 text-xs text-slate-600">
@@ -48,6 +119,11 @@ function DeliveryCard({ order, onMove }) {
             📝 {order.notes}
           </div>
         )}
+        {order.payment_reference && (
+          <div className="bg-emerald-50 text-emerald-700 rounded-lg px-2 py-1 text-[11px] font-medium">
+            💳 Ref: {order.payment_reference}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-1 border-t border-gray-50">
@@ -58,7 +134,11 @@ function DeliveryCard({ order, onMove }) {
           </button>
           {nextCol && (
             <button
-              onClick={() => onMove(order.id, nextCol.key)}
+              onClick={() =>
+                nextCol.key === 'delivered'
+                  ? onMarkDelivered(order)
+                  : onMove(order.id, nextCol.key)
+              }
               className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-colors"
             >
               {nextCol.key === 'delivered' ? 'Mark Delivered' : `→ ${nextCol.label}`}
@@ -74,8 +154,10 @@ function DeliveryCard({ order, onMove }) {
 export default function AdminDeliveriesPage() {
   const { data, isLoading, isError } = useAdminOrders({ page_size: 200 }, { refetchInterval: 30000 })
   const { mutate: updateStatus } = useUpdateOrderStatus()
-  const [search, setSearch] = useState('')
-  const [activeTab, setActiveTab] = useState('placed')
+  const { mutate: recordPayment, isPending: recordingPayment } = useRecordPayment()
+  const [search, setSearch]         = useState('')
+  const [activeTab, setActiveTab]   = useState('placed')
+  const [paymentOrder, setPaymentOrder] = useState(null)
 
   const allOrders = (data?.data || []).filter((o) => o.status !== 'cancelled')
 
@@ -96,6 +178,22 @@ export default function AdminDeliveriesPage() {
 
   const handleMove = (orderId, newStatus) => {
     updateStatus({ id: orderId, status: newStatus })
+  }
+
+  const handleMarkDelivered = (order) => {
+    setPaymentOrder(order)
+  }
+
+  const handleConfirmDelivery = (reference) => {
+    recordPayment(
+      { id: paymentOrder.id, payment_reference: reference },
+      {
+        onSuccess: () => {
+          updateStatus({ id: paymentOrder.id, status: 'delivered' })
+          setPaymentOrder(null)
+        },
+      }
+    )
   }
 
   return (
@@ -182,7 +280,12 @@ export default function AdminDeliveriesPage() {
               ) : (
                 <div className="space-y-3">
                   {items.map((order) => (
-                    <DeliveryCard key={order.id} order={order} onMove={handleMove} />
+                    <DeliveryCard
+                      key={order.id}
+                      order={order}
+                      onMove={handleMove}
+                      onMarkDelivered={handleMarkDelivered}
+                    />
                   ))}
                 </div>
               )
@@ -209,7 +312,12 @@ export default function AdminDeliveriesPage() {
                       </div>
                     ) : (
                       items.map((order) => (
-                        <DeliveryCard key={order.id} order={order} onMove={handleMove} />
+                        <DeliveryCard
+                          key={order.id}
+                          order={order}
+                          onMove={handleMove}
+                          onMarkDelivered={handleMarkDelivered}
+                        />
                       ))
                     )}
                   </div>
@@ -218,6 +326,15 @@ export default function AdminDeliveriesPage() {
             })}
           </div>
         </>
+      )}
+
+      {paymentOrder && (
+        <PaymentModal
+          order={paymentOrder}
+          loading={recordingPayment}
+          onClose={() => setPaymentOrder(null)}
+          onConfirm={handleConfirmDelivery}
+        />
       )}
     </motion.div>
   )
