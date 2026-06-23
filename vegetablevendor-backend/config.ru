@@ -6,23 +6,33 @@ require './src/app'
 
 Bundler.require(:default, App.env)
 
-
 App.load!
+
+# Enable CORS
+use Rack::Cors do
+  allow do
+    origins 'http://localhost:5173'
+
+    resource '*',
+      headers: :any,
+      methods: [:get, :post, :put, :patch, :delete, :options],
+      credentials: true
+  end
+end
 
 run App::Routes
 
 if App.development?
   Listen.to(File.expand_path(File.dirname(__FILE__)), only: %r{.rb$}) do |added, modified, removed|
     files_to_reload = added + modified
-    
+
     App.logger.info("Reloading: #{files_to_reload.join(', ')}")
-    
+
     # Handle route file specially to ensure proper reloading
     if files_to_reload.any? { |f| f.include?('routes.rb') }
       App.logger.info("Routes file changed, consider restarting the server for full effect")
-      # Optionally implement more sophisticated routes reloading here
     end
-    
+
     # Reload all changed files
     files_to_reload.each do |f|
       begin
