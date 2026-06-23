@@ -11,7 +11,8 @@ App.load!
 # Enable CORS
 use Rack::Cors do
   allow do
-    origins 'http://localhost:5173'
+    origins 'http://localhost:5173',
+            'https://vegetable-vendors.vercel.app'
 
     resource '*',
       headers: :any,
