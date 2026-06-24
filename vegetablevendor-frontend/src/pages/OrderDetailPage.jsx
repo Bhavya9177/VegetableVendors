@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, FileText, XCircle, MapPin, Wallet, CheckCircle, Package, Truck, Clock, RefreshCw, ShoppingCart, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import { useOrder, useCancelOrder, useReorder } from '../api/orders'
+import { useOrder, useCancelOrder, useReorder, useConfirmPayment } from '../api/orders'
 import { useOrderIssues, useReportIssue } from '../api/orderIssues'
 import { StatusBadge } from '../components/ui/Badge'
 import { formatPrice } from '../utils/formatPrice'
@@ -119,6 +119,121 @@ const ISSUE_STATUS_META = {
 const RESOLUTION_LABELS = {
   refund: 'Refund issued', replacement: 'Replacement arranged',
   credit: 'Credit note added', none: 'No action required',
+}
+
+function PaymentConfirmCard({ order, onSuccess }) {
+  const [method, setMethod]       = useState('upi')
+  const [reference, setReference] = useState('')
+  const { mutate: confirmPayment, isPending } = useConfirmPayment()
+
+  const paymentStatus = order.payment_status || 'pending'
+
+  if (paymentStatus === 'paid') {
+    return (
+      <div className="card p-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+            <CheckCircle size={20} className="text-emerald-600" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm text-slate-800">Payment Confirmed</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {order.payment_reference ? `Ref: ${order.payment_reference}` : 'Your payment has been verified.'}
+            </p>
+          </div>
+          <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700">Paid</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (paymentStatus === 'submitted') {
+    return (
+      <div className="card p-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+            <Clock size={20} className="text-amber-600" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm text-slate-800">Payment Under Review</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {order.payment_reference
+                ? `Ref: ${order.payment_reference} — awaiting admin verification.`
+                : 'Awaiting admin verification.'}
+            </p>
+          </div>
+          <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700">Pending</span>
+        </div>
+      </div>
+    )
+  }
+
+  const handleSubmit = () => {
+    const ref = method === 'cash' ? 'Cash' : reference.trim()
+    if (!ref) return
+    confirmPayment({ id: order.id, payment_reference: ref }, { onSuccess })
+  }
+
+  return (
+    <div className="card overflow-hidden" style={{ borderColor: '#fde68a' }}>
+      <div className="px-5 py-4 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+        <Wallet size={15} className="text-amber-600" />
+        <h2 className="text-xs font-semibold text-amber-700 uppercase tracking-widest">Confirm Your Payment</h2>
+      </div>
+      <div className="p-5 space-y-4">
+        <p className="text-sm text-slate-600">
+          Your order has been delivered. Please confirm payment of{' '}
+          <span className="font-bold text-slate-800">{formatPrice(order.total_amount)}</span>.
+        </p>
+
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Payment Method</label>
+          <div className="flex gap-2">
+            {[
+              { value: 'upi',  label: '📲 UPI' },
+              { value: 'bank', label: '🏦 Bank Transfer' },
+              { value: 'cash', label: '💵 Cash' },
+            ].map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setMethod(value)}
+                className={`flex-1 py-2 px-2 rounded-xl text-xs font-semibold border transition-all ${
+                  method === value
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white text-slate-600 border-gray-200 hover:border-primary/50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {method !== 'cash' && (
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+              {method === 'upi' ? 'UPI Transaction ID' : 'Bank Reference Number'}
+            </label>
+            <input
+              type="text"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder={method === 'upi' ? 'e.g. UPI123456789' : 'e.g. NEFT/RTGS ref number'}
+              className="input-field"
+            />
+          </div>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={isPending || (method !== 'cash' && !reference.trim())}
+          className="w-full btn-primary justify-center py-3 disabled:opacity-50"
+        >
+          {isPending ? 'Submitting…' : 'Confirm Payment'}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function ReportIssueModal({ orderId, onClose }) {
@@ -301,6 +416,11 @@ export default function OrderDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Payment confirmation — shown when delivered */}
+          {order.status === 'delivered' && (
+            <PaymentConfirmCard order={order} />
+          )}
 
           {/* Items */}
           <div className="card overflow-hidden">

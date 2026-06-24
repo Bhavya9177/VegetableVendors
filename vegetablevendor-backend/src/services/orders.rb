@@ -240,12 +240,34 @@ class App::Services::Orders < App::Services::Base
     return_success(order.to_pos)
   end
 
+  # Customer submits payment proof after delivery (UPI ref, cash note, etc.)
+  # Sets payment_status → 'submitted' so admin can verify and mark paid.
+  def confirm_payment
+    uid   = current_user[:id]
+    order = model.where(id: rp[:id].to_i, user_id: uid).first
+    return_errors!('Order not found', 404) unless order
+    return_errors!('Order must be delivered before confirming payment', 422) unless order.status == 'delivered'
+    return_errors!('Payment has already been confirmed', 422) if order.payment_status == 'paid'
+
+    ref = params[:payment_reference].to_s.strip
+    order.set(
+      payment_status:    'submitted',
+      payment_reference: ref.presence || order.values[:payment_reference]
+    )
+    if order.save
+      return_success(order.reload.to_pos)
+    else
+      return_errors!(order.errors, 400)
+    end
+  end
+
+  # Admin marks payment as verified and paid (after reviewing customer submission)
   def record_payment
     order = model.where(id: rp[:id].to_i).first
     return_errors!('Order not found', 404) unless order
     order.update(
       payment_status:    'paid',
-      payment_reference: params[:payment_reference].to_s.strip.presence
+      payment_reference: params[:payment_reference].to_s.strip.presence || order.values[:payment_reference]
     )
     return_success(order.reload.to_pos)
   end

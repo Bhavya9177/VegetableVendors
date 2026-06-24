@@ -11,8 +11,9 @@ const COLUMNS = [
   { key: 'delivered',       label: 'Delivered',       icon: CheckCircle,   color: 'border-t-green-400',  count_color: 'bg-green-100 text-green-700' },
 ]
 
-function PaymentModal({ order, onConfirm, onClose, loading }) {
-  const [reference, setReference] = useState('')
+function MarkPaidModal({ order, onConfirm, onClose, loading }) {
+  const [reference, setReference] = useState(order.payment_reference || '')
+  const hasCustomerRef = order.payment_status === 'submitted' && order.payment_reference
 
   return (
     <div
@@ -28,20 +29,20 @@ function PaymentModal({ order, onConfirm, onClose, loading }) {
         <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
           <Wallet size={22} className="text-emerald-600" />
         </div>
-        <h3 className="font-heading font-bold text-slate-800 text-lg mb-1">Record Payment</h3>
+        <h3 className="font-heading font-bold text-slate-800 text-lg mb-1">Mark as Paid</h3>
         <p className="text-sm text-slate-500 mb-4">
           Order #{order.id} — <span className="font-semibold text-slate-700">{formatPrice(order.total_amount)}</span>
         </p>
 
-        <div className="bg-slate-50 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
-          <span className="text-base">💵</span>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Method</p>
-            <p className="text-sm font-medium text-slate-800">
-              {order.payment_method === 'cod' ? 'Cash on Delivery' : 'Online / UPI'}
-            </p>
+        {hasCustomerRef && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-4 flex items-start gap-2">
+            <span className="text-base">📲</span>
+            <div>
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Customer Submitted</p>
+              <p className="text-sm font-medium text-slate-800 mt-0.5">{order.payment_reference}</p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="mb-5">
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
@@ -65,7 +66,7 @@ function PaymentModal({ order, onConfirm, onClose, loading }) {
             className="flex-1 btn-primary justify-center py-2.5 disabled:opacity-50"
           >
             <BadgeCheck size={15} />
-            {loading ? 'Saving…' : 'Mark Delivered & Paid'}
+            {loading ? 'Saving…' : 'Mark Paid'}
           </button>
         </div>
       </motion.div>
@@ -73,12 +74,13 @@ function PaymentModal({ order, onConfirm, onClose, loading }) {
   )
 }
 
-function DeliveryCard({ order, onMove, onMarkDelivered }) {
-  const colIndex = COLUMNS.findIndex((c) => c.key === order.status)
-  const nextCol  = COLUMNS[colIndex + 1]
-  const addr     = order.address
-
-  const isPaid = order.payment_status === 'paid'
+function DeliveryCard({ order, onMove, onMarkPaid }) {
+  const colIndex    = COLUMNS.findIndex((c) => c.key === order.status)
+  const nextCol     = COLUMNS[colIndex + 1]
+  const addr        = order.address
+  const paymentSt   = order.payment_status || 'pending'
+  const isPaid      = paymentSt === 'paid'
+  const isSubmitted = paymentSt === 'submitted'
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-4 hover:shadow-card-lg transition-shadow space-y-3">
@@ -92,8 +94,12 @@ function DeliveryCard({ order, onMove, onMarkDelivered }) {
             {order.payment_method === 'cod' ? 'COD' : 'Online'}
           </span>
           {order.status === 'delivered' && (
-            <span className={`badge shrink-0 ${isPaid ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
-              {isPaid ? '✓ Paid' : 'Unpaid'}
+            <span className={`badge shrink-0 ${
+              isPaid      ? 'bg-emerald-50 text-emerald-600' :
+              isSubmitted ? 'bg-blue-50 text-blue-600'        :
+                            'bg-red-50 text-red-500'
+            }`}>
+              {isPaid ? '✓ Paid' : isSubmitted ? 'Ref Submitted' : 'Unpaid'}
             </span>
           )}
         </div>
@@ -120,8 +126,10 @@ function DeliveryCard({ order, onMove, onMarkDelivered }) {
           </div>
         )}
         {order.payment_reference && (
-          <div className="bg-emerald-50 text-emerald-700 rounded-lg px-2 py-1 text-[11px] font-medium">
-            💳 Ref: {order.payment_reference}
+          <div className={`rounded-lg px-2 py-1 text-[11px] font-medium ${
+            isSubmitted ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
+          }`}>
+            {isSubmitted ? '📲 Customer ref: ' : '💳 Ref: '}{order.payment_reference}
           </div>
         )}
       </div>
@@ -132,13 +140,18 @@ function DeliveryCard({ order, onMove, onMarkDelivered }) {
           <button className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors" title="WhatsApp">
             <MessageSquare size={14} />
           </button>
+          {order.status === 'delivered' && !isPaid && (
+            <button
+              onClick={() => onMarkPaid(order)}
+              className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <BadgeCheck size={12} />
+              Mark Paid
+            </button>
+          )}
           {nextCol && (
             <button
-              onClick={() =>
-                nextCol.key === 'delivered'
-                  ? onMarkDelivered(order)
-                  : onMove(order.id, nextCol.key)
-              }
+              onClick={() => onMove(order.id, nextCol.key)}
               className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-colors"
             >
               {nextCol.key === 'delivered' ? 'Mark Delivered' : `→ ${nextCol.label}`}
@@ -157,7 +170,7 @@ export default function AdminDeliveriesPage() {
   const { mutate: recordPayment, isPending: recordingPayment } = useRecordPayment()
   const [search, setSearch]         = useState('')
   const [activeTab, setActiveTab]   = useState('placed')
-  const [paymentOrder, setPaymentOrder] = useState(null)
+  const [payingOrder, setPayingOrder] = useState(null)
 
   const allOrders = (data?.data || []).filter((o) => o.status !== 'cancelled')
 
@@ -180,19 +193,14 @@ export default function AdminDeliveriesPage() {
     updateStatus({ id: orderId, status: newStatus })
   }
 
-  const handleMarkDelivered = (order) => {
-    setPaymentOrder(order)
+  const handleMarkPaid = (order) => {
+    setPayingOrder(order)
   }
 
-  const handleConfirmDelivery = (reference) => {
+  const handleConfirmPayment = (reference) => {
     recordPayment(
-      { id: paymentOrder.id, payment_reference: reference },
-      {
-        onSuccess: () => {
-          updateStatus({ id: paymentOrder.id, status: 'delivered' })
-          setPaymentOrder(null)
-        },
-      }
+      { id: payingOrder.id, payment_reference: reference },
+      { onSuccess: () => setPayingOrder(null) }
     )
   }
 
@@ -284,7 +292,7 @@ export default function AdminDeliveriesPage() {
                       key={order.id}
                       order={order}
                       onMove={handleMove}
-                      onMarkDelivered={handleMarkDelivered}
+                      onMarkPaid={handleMarkPaid}
                     />
                   ))}
                 </div>
@@ -316,7 +324,7 @@ export default function AdminDeliveriesPage() {
                           key={order.id}
                           order={order}
                           onMove={handleMove}
-                          onMarkDelivered={handleMarkDelivered}
+                          onMarkPaid={handleMarkPaid}
                         />
                       ))
                     )}
@@ -328,12 +336,12 @@ export default function AdminDeliveriesPage() {
         </>
       )}
 
-      {paymentOrder && (
-        <PaymentModal
-          order={paymentOrder}
+      {payingOrder && (
+        <MarkPaidModal
+          order={payingOrder}
           loading={recordingPayment}
-          onClose={() => setPaymentOrder(null)}
-          onConfirm={handleConfirmDelivery}
+          onClose={() => setPayingOrder(null)}
+          onConfirm={handleConfirmPayment}
         />
       )}
     </motion.div>

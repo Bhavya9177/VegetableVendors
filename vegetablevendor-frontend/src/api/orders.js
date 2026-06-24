@@ -12,17 +12,17 @@ export const useOrders = (params = {}) =>
     refetchOnWindowFocus: true,
   })
 
-const TERMINAL_STATUSES = ['delivered', 'cancelled']
-
 export const useOrder = (id) =>
   useQuery({
     queryKey: ['order', id],
     queryFn: () => api.get(`/orders/${id}`).then((r) => r.data.data),
     enabled: !!id,
-    // Stop polling once order reaches a terminal state
     refetchInterval: (query) => {
-      const status = query.state.data?.status
-      if (TERMINAL_STATUSES.includes(status)) return false
+      const status        = query.state.data?.status
+      const paymentStatus = query.state.data?.payment_status
+      if (status === 'cancelled') return false
+      if (status === 'delivered' && paymentStatus === 'paid') return false
+      if (status === 'delivered') return 30_000
       return 5_000
     },
     refetchIntervalInBackground: true,
@@ -90,6 +90,22 @@ export const useCancelOrder = () => {
     },
     onError: (err) => {
       toast.error(err.response?.data?.data || 'Failed to cancel order')
+    },
+  })
+}
+
+export const useConfirmPayment = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payment_reference }) =>
+      api.put(`/orders/${id}/confirm-payment`, { data: { payment_reference } }).then((r) => r.data.data),
+    onSuccess: (order) => {
+      qc.setQueryData(['order', String(order.id)], order)
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      toast.success('Payment submitted! We will verify and update your order shortly.')
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.data || 'Failed to submit payment')
     },
   })
 }

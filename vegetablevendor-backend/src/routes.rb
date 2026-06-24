@@ -109,8 +109,9 @@ end
 
       r.on 'orders' do
         r.on(Integer) do |id|
-          r.put('cancel')   { Orders[r, id: id].cancel_order }
-          r.post('reorder') { Orders[r, id: id].reorder }
+          r.put('cancel')          { Orders[r, id: id].cancel_order }
+          r.put('confirm-payment') { Orders[r, id: id].confirm_payment }
+          r.post('reorder')        { Orders[r, id: id].reorder }
           r.on 'issues' do
             r.get  { OrderIssues[r, id: id].list }
             r.post { OrderIssues[r, id: id].create }
