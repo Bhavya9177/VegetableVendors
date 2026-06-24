@@ -238,12 +238,21 @@ end
 
   def auth_required!
     unless App.cu.valid?
+      reason = if App.cu.decoded_token.nil?
+        'jwt_decode_failed'
+      elsif App.cu.user_obj.nil?
+        'user_not_found_or_inactive'
+      else
+        'session_mismatch'
+      end
+      App.logger.warn("[auth_required!] 401 — #{reason} — path: #{request.path}")
       request.halt(401, { 'Content-Type' => 'application/json' }, { status: 'Unauthorized!' }.to_json)
     end
   end
 
   def admin_required!
     unless App.cu.user_obj&.admin?
+      App.logger.warn("[admin_required!] 403 — user #{App.cu.id} role=#{App.cu.user_obj&.role} — path: #{request.path}")
       request.halt(403, { 'Content-Type' => 'application/json' }, { status: 'Forbidden!' }.to_json)
     end
   end

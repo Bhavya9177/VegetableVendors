@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from './store/authStore'
 import { getUserInfo } from './api/auth'
+import api from './api/axios'
 
 import Header from './components/layout/Header'
 import Footer from './components/layout/Footer'
@@ -68,9 +69,26 @@ function useSessionGuard() {
   }, [])
 }
 
+// Keeps the Render free-tier backend alive by pinging /api/version every 9 min
+// (Render sleeps services after 15 min of inactivity). Also wakes it up immediately
+// when the admin tab regains focus, so the first real request doesn't fail.
+function useKeepAlive() {
+  useEffect(() => {
+    const ping = () => api.get('/version').catch(() => {})
+    ping()
+    const interval = setInterval(ping, 9 * 60 * 1000)
+    const onVisible = () => { if (document.visibilityState === 'visible') ping() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
+}
+
 const qc = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
+    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 2 * 60_000 },
   },
 })
 
@@ -88,6 +106,7 @@ function PublicLayout() {
 }
 
 function AdminLayout() {
+  useKeepAlive()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 

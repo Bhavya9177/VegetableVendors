@@ -21,12 +21,14 @@ export const useDashboard = () =>
   useQuery({
     queryKey: ['dashboard'],
     queryFn: () => api.get('/admin/dashboard').then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
 export const useAdminUsers = (params = {}) =>
   useQuery({
     queryKey: ['admin-users', params],
     queryFn: () => api.get('/admin/users', { params }).then((r) => r.data),
+    staleTime: 2 * 60 * 1000,
   })
 
 export const useCreateProduct = () => {
@@ -65,7 +67,7 @@ export const useDeleteProduct = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id) =>
-      api.delete(`/admin/proaducts/${id}`).then((r) => r.data),
+      api.delete(`/admin/products/${id}`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-products'] })
       qc.invalidateQueries({ queryKey: ['products'] })
@@ -223,6 +225,7 @@ export const useAdminCoupons = (params = {}) =>
   useQuery({
     queryKey: ['admin-coupons', params],
     queryFn: () => api.get('/admin/coupons', { params }).then((r) => r.data),
+    staleTime: 3 * 60 * 1000,
   })
 
 export const useCreateCoupon = () => {
@@ -298,6 +301,7 @@ export const useContactMessages = (params = {}) =>
   useQuery({
     queryKey: ['contact-messages', params],
     queryFn: () => api.get('/admin/contact-messages', { params }).then((r) => r.data),
+    staleTime: 2 * 60 * 1000,
   })
 
 export const useMarkContactMessageRead = () => {

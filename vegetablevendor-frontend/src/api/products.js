@@ -19,4 +19,5 @@ export const useAdminProducts = (params = {}) =>
   useQuery({
     queryKey: ['admin-products', params],
     queryFn: () => api.get('/admin/products', { params }).then((r) => r.data),
+    staleTime: 2 * 60 * 1000,
   })

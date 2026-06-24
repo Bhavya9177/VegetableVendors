@@ -9,7 +9,7 @@ module App
   
   class<<self
     attr_reader :db, :audit_db
-    NUMBER_OF_CONNECTIONS = ENV['POOL_SIZE'] || 1
+    NUMBER_OF_CONNECTIONS = ENV['POOL_SIZE'] || 5
     
     def development?
       env == 'development'
@@ -73,7 +73,9 @@ module App
         }
       )
       @db.extension(:connection_validator)
-      @db.pool.connection_validation_timeout = 3600
+      # Validate connections idle > 2 min before use — prevents stale-connection
+      # 401s when the PG server drops idle connections (common on Render free tier).
+      @db.pool.connection_validation_timeout = 120
     end
     
     def setup_aws_config
