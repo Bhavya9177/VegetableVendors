@@ -21,8 +21,19 @@ api.interceptors.response.use(
     sessionExpired = false
     return res
   },
-  (err) => {
+  async (err) => {
     const status = err.response?.status
+    const config = err.config
+
+    // On the first 401 for an authenticated request, retry once — Render.com
+    // free-tier cold starts can transiently reject valid tokens if the DB
+    // connection isn't ready yet. A second 401 means the session is truly gone.
+    if (status === 401 && useAuthStore.getState().token && !config._retried) {
+      config._retried = true
+      await new Promise((r) => setTimeout(r, 1500))
+      return api(config)
+    }
+
     if ((status === 401 || status === 403) && !sessionExpired) {
       sessionExpired = true
       useAuthStore.getState().logout()
