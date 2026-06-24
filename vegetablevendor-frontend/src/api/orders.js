@@ -7,8 +7,8 @@ export const useOrders = (params = {}) =>
   useQuery({
     queryKey: ['orders', params],
     queryFn: () => api.get('/orders', { params }).then((r) => r.data),
-    refetchInterval: 8_000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
@@ -32,22 +32,23 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsPage from './pages/TermsPage'
 import RefundPolicyPage from './pages/RefundPolicyPage'
 
-// Admin pages
-import AdminLoginPage from './pages/admin/AdminLoginPage'
-import AdminDashboardPage from './pages/admin/AdminDashboardPage'
-import AdminProductsPage from './pages/admin/AdminProductsPage'
-import AdminCategoriesPage from './pages/admin/AdminCategoriesPage'
-import AdminOrdersPage from './pages/admin/AdminOrdersPage'
-import AdminReviewsPage from './pages/admin/AdminReviewsPage'
-import AdminInventoryPage from './pages/admin/AdminInventoryPage'
-import AdminContactMessagesPage from './pages/admin/AdminContactMessagesPage'
-import AdminCustomersPage from './pages/admin/AdminCustomersPage'
-import AdminDeliveriesPage from './pages/admin/AdminDeliveriesPage'
-import AdminWhatsAppPage from './pages/admin/AdminWhatsAppPage'
-import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage'
-import AdminCouponsPage from './pages/admin/AdminCouponsPage'
-import AdminSettingsPage from './pages/admin/AdminSettingsPage'
-import AdminIssuesPage from './pages/admin/AdminIssuesPage'
+// Admin pages — lazy loaded so their code (including Recharts) is never
+// downloaded by customers who only visit the shop.
+const AdminLoginPage           = lazy(() => import('./pages/admin/AdminLoginPage'))
+const AdminDashboardPage       = lazy(() => import('./pages/admin/AdminDashboardPage'))
+const AdminProductsPage        = lazy(() => import('./pages/admin/AdminProductsPage'))
+const AdminCategoriesPage      = lazy(() => import('./pages/admin/AdminCategoriesPage'))
+const AdminOrdersPage          = lazy(() => import('./pages/admin/AdminOrdersPage'))
+const AdminReviewsPage         = lazy(() => import('./pages/admin/AdminReviewsPage'))
+const AdminInventoryPage       = lazy(() => import('./pages/admin/AdminInventoryPage'))
+const AdminContactMessagesPage = lazy(() => import('./pages/admin/AdminContactMessagesPage'))
+const AdminCustomersPage       = lazy(() => import('./pages/admin/AdminCustomersPage'))
+const AdminDeliveriesPage      = lazy(() => import('./pages/admin/AdminDeliveriesPage'))
+const AdminWhatsAppPage        = lazy(() => import('./pages/admin/AdminWhatsAppPage'))
+const AdminAnalyticsPage       = lazy(() => import('./pages/admin/AdminAnalyticsPage'))
+const AdminCouponsPage         = lazy(() => import('./pages/admin/AdminCouponsPage'))
+const AdminSettingsPage        = lazy(() => import('./pages/admin/AdminSettingsPage'))
+const AdminIssuesPage          = lazy(() => import('./pages/admin/AdminIssuesPage'))
 
 // Validates the persisted token once on startup. If the server rejects it
 // (new login on another device invalidated this session), clears auth immediately
@@ -121,7 +122,13 @@ function AdminLayout() {
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <AdminTopbar onOpenSidebar={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-auto p-4 pb-20 md:p-6 md:pb-6">
-          <Outlet />
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-full">
+              <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            </div>
+          }>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       <AdminBottomNav onOpenMenu={() => setSidebarOpen(true)} />
@@ -172,7 +179,7 @@ export default function App() {
         <Routes>
           <Route element={<AppInner />}>
           {/* Admin login — standalone */}
-          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin/login" element={<Suspense fallback={null}><AdminLoginPage /></Suspense>} />
 
           {/* Public layout */}
           <Route element={<PublicLayout />}>
