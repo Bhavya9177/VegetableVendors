@@ -112,7 +112,6 @@ export default function AdminDashboardPage() {
                 icon: ClipboardList,
                 color: 'text-yellow-600',
                 bg: 'bg-yellow-50',
-                href: '/admin/deliveries',
               },
               {
                 label: 'Out for Delivery',
@@ -121,7 +120,6 @@ export default function AdminDashboardPage() {
                 icon: Truck,
                 color: 'text-orange-500',
                 bg: 'bg-orange-50',
-                href: '/admin/deliveries',
               },
               {
                 label: 'Completed Today',
