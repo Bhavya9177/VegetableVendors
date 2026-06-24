@@ -122,8 +122,6 @@ const RESOLUTION_LABELS = {
 }
 
 function PaymentConfirmCard({ order, onSuccess }) {
-  const [method, setMethod]       = useState('upi')
-  const [reference, setReference] = useState('')
   const { mutate: confirmPayment, isPending } = useConfirmPayment()
 
   const paymentStatus = order.payment_status || 'pending'
@@ -137,9 +135,7 @@ function PaymentConfirmCard({ order, onSuccess }) {
           </div>
           <div>
             <p className="font-semibold text-sm text-slate-800">Payment Confirmed</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {order.payment_reference ? `Ref: ${order.payment_reference}` : 'Your payment has been verified.'}
-            </p>
+            <p className="text-xs text-slate-400 mt-0.5">Your payment has been verified.</p>
           </div>
           <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700">Paid</span>
         </div>
@@ -156,11 +152,7 @@ function PaymentConfirmCard({ order, onSuccess }) {
           </div>
           <div>
             <p className="font-semibold text-sm text-slate-800">Payment Under Review</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {order.payment_reference
-                ? `Ref: ${order.payment_reference} — awaiting admin verification.`
-                : 'Awaiting admin verification.'}
-            </p>
+            <p className="text-xs text-slate-400 mt-0.5">Awaiting admin verification.</p>
           </div>
           <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700">Pending</span>
         </div>
@@ -169,9 +161,7 @@ function PaymentConfirmCard({ order, onSuccess }) {
   }
 
   const handleSubmit = () => {
-    const ref = method === 'cash' ? 'Cash' : reference.trim()
-    if (!ref) return
-    confirmPayment({ id: order.id, payment_reference: ref }, { onSuccess })
+    confirmPayment({ id: order.id, payment_reference: 'Cash' }, { onSuccess })
   }
 
   return (
@@ -182,54 +172,24 @@ function PaymentConfirmCard({ order, onSuccess }) {
       </div>
       <div className="p-5 space-y-4">
         <p className="text-sm text-slate-600">
-          Your order has been delivered. Please confirm payment of{' '}
+          Your order has been delivered. Please confirm cash payment of{' '}
           <span className="font-bold text-slate-800">{formatPrice(order.total_amount)}</span>.
         </p>
 
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Payment Method</label>
-          <div className="flex gap-2">
-            {[
-              { value: 'upi',  label: '📲 UPI' },
-              { value: 'bank', label: '🏦 Bank Transfer' },
-              { value: 'cash', label: '💵 Cash' },
-            ].map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setMethod(value)}
-                className={`flex-1 py-2 px-2 rounded-xl text-xs font-semibold border transition-all ${
-                  method === value
-                    ? 'bg-primary text-white border-primary'
-                    : 'bg-white text-slate-600 border-gray-200 hover:border-primary/50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+        <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
+          <span className="text-xl">💵</span>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Cash on Delivery</p>
+            <p className="text-xs text-slate-400">Pay the delivery person in cash</p>
           </div>
         </div>
 
-        {method !== 'cash' && (
-          <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
-              {method === 'upi' ? 'UPI Transaction ID' : 'Bank Reference Number'}
-            </label>
-            <input
-              type="text"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder={method === 'upi' ? 'e.g. UPI123456789' : 'e.g. NEFT/RTGS ref number'}
-              className="input-field"
-            />
-          </div>
-        )}
-
         <button
           onClick={handleSubmit}
-          disabled={isPending || (method !== 'cash' && !reference.trim())}
+          disabled={isPending}
           className="w-full btn-primary justify-center py-3 disabled:opacity-50"
         >
-          {isPending ? 'Submitting…' : 'Confirm Payment'}
+          {isPending ? 'Submitting…' : 'Confirm Cash Payment'}
         </button>
       </div>
     </div>
