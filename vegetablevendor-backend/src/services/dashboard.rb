@@ -88,7 +88,19 @@ class App::Services::Dashboard < App::Services::Base
       .all
       .map { |r| { month: r[:month], revenue: r[:revenue].to_i, orders: r[:orders].to_i } }
 
-    # Eager-load associations — avoids N+1 per order/review
+    # ── Today stats (midnight UTC as boundary) ───────────────────────────────
+    now        = Time.now.utc
+    today_start = Time.utc(now.year, now.month, now.day)
+
+    today_orders     = Order.where { created_at >= today_start }.count
+    completed_today  = Order.where(status: 'delivered').where { created_at >= today_start }.count
+    pending_packing  = Order.where(status: 'placed').count
+    out_for_delivery_count = Order.where(status: 'out_for_delivery').count
+    expected_cash    = (App.db[:orders]
+                         .where(status: 'out_for_delivery', payment_method: 'cod')
+                         .sum(:total_amount) || 0).to_i
+
+    # ── Eager-load associations — avoids N+1 per order/review ─────────────
     recent_orders  = Order.order(Sequel.desc(:created_at)).limit(10)
                           .eager(:user, :address, order_items: :product).all.map(&:to_pos)
     recent_reviews = Review.where(active: true).order(Sequel.desc(:created_at)).limit(5)
@@ -105,6 +117,11 @@ class App::Services::Dashboard < App::Services::Base
       out_of_stock:         product_stats[:out_of_stock] || 0,
       low_stock_count:      low_stock_products.size,
       low_stock_products:   low_stock_products,
+      today_orders:         today_orders,
+      completed_today:      completed_today,
+      pending_packing:      pending_packing,
+      out_for_delivery:     out_for_delivery_count,
+      expected_cash:        expected_cash,
       recent_orders:        recent_orders,
       orders_by_status:     Order::ORDER_STATUSES.map { |s| { status: s, count: status_counts[s] || 0 } },
       recent_reviews:       recent_reviews,

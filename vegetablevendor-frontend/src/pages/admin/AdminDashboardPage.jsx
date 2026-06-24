@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   ShoppingCart, DollarSign, Truck, AlertTriangle,
-  Banknote, Users, Package,
+  Banknote, Users, Package, CheckCircle, ClipboardList,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -74,6 +74,112 @@ export default function AdminDashboardPage() {
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           Live data
         </div>
+      </motion.div>
+
+      {/* Today at a Glance */}
+      <motion.div variants={item} className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">☀️</span>
+            <h2 className="font-heading font-bold text-slate-800">Today at a Glance</h2>
+          </div>
+          <span className="text-xs text-slate-400">
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </span>
+        </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-xl p-4 h-20 skeleton-box" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[
+              {
+                label: "Today's Orders",
+                value: data?.today_orders ?? 0,
+                sub: 'placed today',
+                icon: ShoppingCart,
+                color: 'text-blue-500',
+                bg: 'bg-blue-50',
+              },
+              {
+                label: 'Pending Packing',
+                value: data?.pending_packing ?? 0,
+                sub: 'need to be packed',
+                icon: ClipboardList,
+                color: 'text-yellow-600',
+                bg: 'bg-yellow-50',
+                href: '/admin/deliveries',
+              },
+              {
+                label: 'Out for Delivery',
+                value: data?.out_for_delivery ?? 0,
+                sub: 'on the way',
+                icon: Truck,
+                color: 'text-orange-500',
+                bg: 'bg-orange-50',
+                href: '/admin/deliveries',
+              },
+              {
+                label: 'Completed Today',
+                value: data?.completed_today ?? 0,
+                sub: 'delivered today',
+                icon: CheckCircle,
+                color: 'text-emerald-600',
+                bg: 'bg-emerald-50',
+              },
+              {
+                label: 'Expected Cash',
+                value: formatPrice(data?.expected_cash ?? 0),
+                sub: 'COD out for delivery',
+                icon: Banknote,
+                color: 'text-primary',
+                bg: 'bg-primary-50',
+              },
+            ].map(({ label, value, sub, icon: Icon, color, bg, href }) => {
+              const card = (
+                <div className={`bg-white rounded-xl p-4 space-y-2 ${href ? 'hover:shadow-card transition-shadow cursor-pointer' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide leading-tight">{label}</p>
+                    <div className={`w-7 h-7 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                      <Icon size={13} className={color} />
+                    </div>
+                  </div>
+                  <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                  <p className="text-[11px] text-slate-400">{sub}</p>
+                </div>
+              )
+              return href
+                ? <a key={label} href={href}>{card}</a>
+                : <div key={label}>{card}</div>
+            })}
+          </div>
+        )}
+
+        {/* Low stock row */}
+        {!isLoading && data?.low_stock_products?.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-amber-100">
+            <div className="flex items-center gap-2 mb-2.5">
+              <AlertTriangle size={13} className="text-red-500" />
+              <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">Low Stock — {data.low_stock_count} item{data.low_stock_count !== 1 ? 's' : ''}</p>
+              <a href="/admin/inventory" className="ml-auto text-xs text-primary font-semibold hover:underline">Manage</a>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {data.low_stock_products.slice(0, 6).map((p) => (
+                <div key={p.id} className="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1.5 text-xs border border-red-100">
+                  <span className={`font-bold ${p.stock <= 0 ? 'text-red-500' : 'text-orange-500'}`}>{p.stock}</span>
+                  <span className="text-slate-500">{p.name}</span>
+                </div>
+              ))}
+              {data.low_stock_products.length > 6 && (
+                <span className="text-xs text-slate-400 self-center">+{data.low_stock_products.length - 6} more</span>
+              )}
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Metric cards */}
