@@ -255,7 +255,7 @@ class App::Services::Orders < App::Services::Base
       payment_reference: ref.presence || order.values[:payment_reference]
     )
     if order.save
-      return_success(order.reload.to_pos)
+      return_success(order.reload.to_pos)s
     else
       return_errors!(order.errors, 400)
     end

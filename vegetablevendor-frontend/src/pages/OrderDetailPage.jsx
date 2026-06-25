@@ -411,12 +411,21 @@ export default function OrderDetailPage() {
             <div className="px-5 py-4 border-t border-gray-50 space-y-2 bg-slate-50/50">
               <div className="flex justify-between text-sm text-slate-500">
                 <span>Subtotal</span>
-                <span>{formatPrice(order.total_amount)}</span>
+                <span>{formatPrice(order.subtotal_amount)}</span>
               </div>
               <div className="flex justify-between text-sm text-slate-500">
                 <span>Delivery</span>
-                <span className="text-emerald-600 font-medium">FREE</span>
+                {order.delivery_fee > 0
+                  ? <span>{formatPrice(order.delivery_fee)}</span>
+                  : <span className="text-emerald-600 font-medium">FREE</span>
+                }
               </div>
+              {order.discount_amount > 0 && (
+                <div className="flex justify-between text-sm text-emerald-600">
+                  <span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ''}</span>
+                  <span>-{formatPrice(order.discount_amount)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-heading font-bold text-base pt-2 border-t border-gray-100">
                 <span>Total</span>
                 <span className="text-primary">{formatPrice(order.total_amount)}</span>
@@ -458,13 +467,22 @@ export default function OrderDetailPage() {
               </div>
               <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 space-y-1.5">
                 <div className="flex justify-between text-xs text-slate-500">
-                  <span>Order total</span>
-                  <span>{formatPrice(order.total_amount)}</span>
+                  <span>Items total</span>
+                  <span>{formatPrice(order.subtotal_amount)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-slate-500">
                   <span>Delivery</span>
-                  <span className="text-emerald-600 font-medium">FREE</span>
+                  {order.delivery_fee > 0
+                    ? <span>{formatPrice(order.delivery_fee)}</span>
+                    : <span className="text-emerald-600 font-medium">FREE</span>
+                  }
                 </div>
+                {order.discount_amount > 0 && (
+                  <div className="flex justify-between text-xs text-emerald-600">
+                    <span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ''}</span>
+                    <span>-{formatPrice(order.discount_amount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-sm pt-1.5 border-t border-amber-200">
                   <span className="text-amber-800">Amount due (COD)</span>
                   <span className="text-amber-700">{formatPrice(order.total_amount)}</span>

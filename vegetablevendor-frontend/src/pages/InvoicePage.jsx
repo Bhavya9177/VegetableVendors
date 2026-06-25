@@ -24,7 +24,9 @@ export default function InvoicePage() {
     )
   }
 
-  const subtotal   = order.total_amount || 0
+  const subtotal      = order.subtotal_amount || order.total_amount || 0
+  const deliveryFee   = order.delivery_fee || 0
+  const discountAmt   = order.discount_amount || 0
   const issuedDate = order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', {
     day: '2-digit', month: 'long', year: 'numeric',
   }) : '—'
@@ -137,15 +139,24 @@ export default function InvoicePage() {
               </div>
               <div className="flex justify-between text-sm text-gray-500">
                 <span>Delivery charges</span>
-                <span className="text-green-600 font-semibold">FREE</span>
+                {deliveryFee > 0
+                  ? <span>{formatPrice(deliveryFee)}</span>
+                  : <span className="text-green-600 font-semibold">FREE</span>
+                }
               </div>
+              {discountAmt > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ''}</span>
+                  <span>-{formatPrice(discountAmt)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm text-gray-500">
                 <span>Taxes</span>
                 <span>Included</span>
               </div>
               <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2 mt-2 text-gray-900">
                 <span>Amount Due (COD)</span>
-                <span className="text-green-700">{formatPrice(subtotal)}</span>
+                <span className="text-green-700">{formatPrice(order.total_amount)}</span>
               </div>
             </div>
           </div>
@@ -154,7 +165,7 @@ export default function InvoicePage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 mb-10">
             <p className="text-sm font-semibold text-amber-800">💵 Cash on Delivery Order</p>
             <p className="text-xs text-amber-700 mt-1">
-              Please keep <strong>{formatPrice(subtotal)}</strong> ready at the time of delivery.
+              Please keep <strong>{formatPrice(order.total_amount)}</strong> ready at the time of delivery.
               Our delivery executive will collect the payment at your door.
             </p>
           </div>
